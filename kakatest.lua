@@ -1,298 +1,447 @@
--- Ryzen Fling That & People v3.0 (ТОЧНАЯ КОПИЯ СТИЛЯ)
--- Полностью рабочий для Delta / Synapse / Krnl
+-- Ryzen Fling That v5.0 (МОБИЛЬНАЯ ВЕРСИЯ)
+-- Без горячих клавиш, только кнопки
+-- Полностью рабочий для Delta Mobile / Hydrogen / Arceus
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 if not player then return end
 
--- === ПЕРЕМЕННЫЕ ===
+-- === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
 local flingActive = false
-local flingConnections = {}
 local antiGrabActive = true
-local touchFlingActive = false
 local targetPlayer = nil
+local flingConnections = {}
+local guiVisible = true
+local screenGui = nil
+local mainFrame = nil
 
--- === СОЗДАНИЕ GUI (ТОЧНО КАК НА СКРИНШОТЕ) ===
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RyzenFlingGUI"
-screenGui.Parent = player:WaitForChild("PlayerGui")
-screenGui.ResetOnSpawn = false
-
--- Главное окно (стиль "Infinite Yield")
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 380, 0, 520)
-mainFrame.Position = UDim2.new(0.5, -190, 0.5, -260)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-mainFrame.BackgroundTransparency = 0.1
-mainFrame.BorderSizePixel = 1
-mainFrame.BorderColor3 = Color3.fromRGB(80, 80, 120)
-mainFrame.Parent = screenGui
-mainFrame.Active = true
-mainFrame.Draggable = true
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = mainFrame
-
--- Заголовок (как на скриншоте "ton 618")
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 40)
-titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-titleBar.BackgroundTransparency = 0.2
-titleBar.BorderSizePixel = 1
-titleBar.BorderColor3 = Color3.fromRGB(80, 80, 120)
-titleBar.Parent = mainFrame
-
-local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = UDim.new(0, 10)
-titleCorner.Parent = titleBar
-
-local titleText = Instance.new("TextLabel")
-titleText.Size = UDim2.new(1, 0, 1, 0)
-titleText.BackgroundTransparency = 1
-titleText.Text = "⚡ RYZEN FLING v3.0"
-titleText.TextColor3 = Color3.fromRGB(0, 200, 255)
-titleText.Font = Enum.Font.GothamBold
-titleText.TextSize = 20
-titleText.TextXAlignment = Enum.TextXAlignment.Left
-titleText.Position = UDim2.new(0, 10, 0, 0)
-titleText.Parent = titleBar
-
--- Кнопка закрытия (X)
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0, 5)
-closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-closeBtn.Text = "✕"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 18
-closeBtn.BorderSizePixel = 0
-closeBtn.Parent = titleBar
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 5)
-closeCorner.Parent = closeBtn
-
-closeBtn.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
-end)
-
--- === КНОПКИ КАК НА СКРИНШОТЕ ===
-local function createButton(text, yPos, color, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.85, 0, 0, 40)
-    btn.Position = UDim2.new(0.075, 0, 0, yPos)
-    btn.BackgroundColor3 = color or Color3.fromRGB(60, 60, 90)
-    btn.BackgroundTransparency = 0.3
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 16
-    btn.BorderSizePixel = 1
-    btn.BorderColor3 = Color3.fromRGB(100, 100, 150)
-    btn.Parent = mainFrame
-    
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 8)
-    btnCorner.Parent = btn
-    
-    btn.MouseButton1Click:Connect(callback)
-    return btn
-end
-
--- Статусная строка
-local statusBar = Instance.new("TextLabel")
-statusBar.Size = UDim2.new(0.85, 0, 0, 25)
-statusBar.Position = UDim2.new(0.075, 0, 0, 50)
-statusBar.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-statusBar.BackgroundTransparency = 0.5
-statusBar.Text = "➤ Статус: Выключен"
-statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
-statusBar.Font = Enum.Font.Gotham
-statusBar.TextSize = 14
-statusBar.TextXAlignment = Enum.TextXAlignment.Left
-statusBar.Parent = mainFrame
-
-local statusCorner = Instance.new("UICorner")
-statusCorner.CornerRadius = UDim.new(0, 5)
-statusCorner.Parent = statusBar
-
--- === ОСНОВНЫЕ КНОПКИ (Fling That & People) ===
-local yPos = 90
-
--- Fling That (активирует флинг для выбранного игрока)
-local flingThatBtn = createButton("🎯 FLING THAT", yPos, Color3.fromRGB(200, 50, 50), function()
-    if flingActive then
-        stopFling()
-        flingThatBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
-        statusBar.Text = "➤ Статус: Выключен"
-        return
+-- === СОЗДАНИЕ GUI ===
+local function createGUI()
+    if screenGui then 
+        screenGui:Destroy() 
     end
     
-    if not targetPlayer then
-        statusBar.Text = "⚠️ Сначала выбери цель в списке!"
-        return
-    end
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "RyzenFlingGUI"
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+    screenGui.ResetOnSpawn = false
     
-    startFling(targetPlayer)
-    flingThatBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-    statusBar.Text = "➤ FLING THAT: АКТИВЕН на " .. targetPlayer.Name
-end)
-yPos = yPos + 50
-
--- Fling People (флинг всех рядом)
-local flingPeopleBtn = createButton("👥 FLING PEOPLE", yPos, Color3.fromRGB(200, 100, 0), function()
-    if flingActive and not targetPlayer then
-        stopFling()
-        flingPeopleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
-        statusBar.Text = "➤ Статус: Выключен"
-        return
-    end
+    -- ГЛАВНОЕ ОКНО
+    mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 400, 0, 520)
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -260)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+    mainFrame.BackgroundTransparency = 0.1
+    mainFrame.BorderSizePixel = 2
+    mainFrame.BorderColor3 = Color3.fromRGB(60, 60, 150)
+    mainFrame.Parent = screenGui
+    mainFrame.Active = true
+    mainFrame.Draggable = true
     
-    if flingActive then stopFling() end
-    targetPlayer = nil
-    startFling(nil) -- nil = все игроки
-    flingPeopleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-    statusBar.Text = "➤ FLING PEOPLE: АКТИВЕН (все игроки)"
-end)
-yPos = yPos + 50
-
--- Anti Grab (как на скриншоте)
-local antiGrabBtn = createButton("🛡️ ANTI GRAB [ON]", yPos, Color3.fromRGB(0, 150, 0), function()
-    antiGrabActive = not antiGrabActive
-    if antiGrabActive then
-        antiGrabBtn.Text = "🛡️ ANTI GRAB [ON]"
-        antiGrabBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        statusBar.Text = "➤ Anti Grab: ВКЛЮЧЕН"
-        enableAntiGrab()
-    else
-        antiGrabBtn.Text = "🛡️ ANTI GRAB [OFF]"
-        antiGrabBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        statusBar.Text = "➤ Anti Grab: ВЫКЛЮЧЕН"
-    end
-end)
-yPos = yPos + 50
-
--- Touch Fling (как на скриншоте "Toys Menu" стиль)
-local touchFlingBtn = createButton("👊 TOUCH FLING", yPos, Color3.fromRGB(100, 50, 200), function()
-    touchFlingActive = not touchFlingActive
-    if touchFlingActive then
-        touchFlingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-        statusBar.Text = "➤ TOUCH FLING: АКТИВЕН"
-        enableTouchFling()
-    else
-        touchFlingBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
-        statusBar.Text = "➤ TOUCH FLING: ВЫКЛЮЧЕН"
-        disableTouchFling()
-    end
-end)
-yPos = yPos + 50
-
--- === СПИСОК ИГРОКОВ (как "target" на скриншоте) ===
-local playerListFrame = Instance.new("ScrollingFrame")
-playerListFrame.Size = UDim2.new(0.85, 0, 0, 120)
-playerListFrame.Position = UDim2.new(0.075, 0, 0, yPos + 10)
-playerListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-playerListFrame.BackgroundTransparency = 0.5
-playerListFrame.BorderSizePixel = 1
-playerListFrame.BorderColor3 = Color3.fromRGB(80, 80, 120)
-playerListFrame.Parent = mainFrame
-playerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-playerListFrame.ScrollBarThickness = 6
-
-local listCorner = Instance.new("UICorner")
-listCorner.CornerRadius = UDim.new(0, 5)
-listCorner.Parent = playerListFrame
-
-local listLabel = Instance.new("TextLabel")
-listLabel.Size = UDim2.new(1, 0, 0, 25)
-listLabel.BackgroundTransparency = 1
-listLabel.Text = "🎯 ВЫБЕРИ ЦЕЛЬ:"
-listLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
-listLabel.Font = Enum.Font.GothamBold
-listLabel.TextSize = 14
-listLabel.TextXAlignment = Enum.TextXAlignment.Left
-listLabel.Parent = playerListFrame
-
-local function updatePlayerList()
-    -- Очищаем старые кнопки (кроме заголовка)
-    for _, child in ipairs(playerListFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            child:Destroy()
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = mainFrame
+    
+    -- ЗАГОЛОВОК
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 45)
+    titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 55)
+    titleBar.BackgroundTransparency = 0.2
+    titleBar.BorderSizePixel = 2
+    titleBar.BorderColor3 = Color3.fromRGB(60, 60, 150)
+    titleBar.Parent = mainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 12)
+    titleCorner.Parent = titleBar
+    
+    local titleText = Instance.new("TextLabel")
+    titleText.Size = UDim2.new(1, -80, 1, 0)
+    titleText.Position = UDim2.new(0, 10, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "⚡ RYZEN FLING"
+    titleText.TextColor3 = Color3.fromRGB(0, 200, 255)
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextSize = 20
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.Parent = titleBar
+    
+    -- КНОПКА СВЕРНУТЬ/РАЗВЕРНУТЬ (для телефона)
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 35, 0, 35)
+    toggleBtn.Position = UDim2.new(1, -80, 0, 5)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+    toggleBtn.Text = "−"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 24
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.Parent = titleBar
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 6)
+    toggleCorner.Parent = toggleBtn
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        guiVisible = not guiVisible
+        if guiVisible then
+            mainFrame.Size = UDim2.new(0, 400, 0, 520)
+            toggleBtn.Text = "−"
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+        else
+            mainFrame.Size = UDim2.new(0, 400, 0, 45)
+            toggleBtn.Text = "+"
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        end
+    end)
+    
+    -- КНОПКА ЗАКРЫТИЯ (X)
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 35, 0, 35)
+    closeBtn.Position = UDim2.new(1, -40, 0, 5)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    closeBtn.Text = "✕"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 20
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Parent = titleBar
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 6)
+    closeCorner.Parent = closeBtn
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        screenGui:Destroy()
+    end)
+    
+    -- СТАТУС
+    local statusBar = Instance.new("TextLabel")
+    statusBar.Size = UDim2.new(0.9, 0, 0, 28)
+    statusBar.Position = UDim2.new(0.05, 0, 0.12, 0)
+    statusBar.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
+    statusBar.BackgroundTransparency = 0.5
+    statusBar.Text = "✅ СТАТУС: ОЖИДАНИЕ"
+    statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
+    statusBar.Font = Enum.Font.GothamSemibold
+    statusBar.TextSize = 14
+    statusBar.TextXAlignment = Enum.TextXAlignment.Center
+    statusBar.Parent = mainFrame
+    
+    local statusCorner = Instance.new("UICorner")
+    statusCorner.CornerRadius = UDim.new(0, 6)
+    statusCorner.Parent = statusBar
+    
+    -- === КНОПКИ ===
+    local yPos = 0.22
+    
+    -- 1. FLING THAT
+    local flingThatBtn = Instance.new("TextButton")
+    flingThatBtn.Size = UDim2.new(0.85, 0, 0, 45)
+    flingThatBtn.Position = UDim2.new(0.075, 0, yPos, 0)
+    flingThatBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+    flingThatBtn.BackgroundTransparency = 0.3
+    flingThatBtn.Text = "🎯 FLING THAT [ВЫКЛ]"
+    flingThatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    flingThatBtn.Font = Enum.Font.GothamBold
+    flingThatBtn.TextSize = 17
+    flingThatBtn.BorderSizePixel = 2
+    flingThatBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
+    flingThatBtn.Parent = mainFrame
+    
+    local btnCorner1 = Instance.new("UICorner")
+    btnCorner1.CornerRadius = UDim.new(0, 8)
+    btnCorner1.Parent = flingThatBtn
+    
+    yPos = yPos + 0.13
+    
+    -- 2. FLING PEOPLE
+    local flingPeopleBtn = Instance.new("TextButton")
+    flingPeopleBtn.Size = UDim2.new(0.85, 0, 0, 45)
+    flingPeopleBtn.Position = UDim2.new(0.075, 0, yPos, 0)
+    flingPeopleBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+    flingPeopleBtn.BackgroundTransparency = 0.3
+    flingPeopleBtn.Text = "👥 FLING PEOPLE [ВЫКЛ]"
+    flingPeopleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    flingPeopleBtn.Font = Enum.Font.GothamBold
+    flingPeopleBtn.TextSize = 17
+    flingPeopleBtn.BorderSizePixel = 2
+    flingPeopleBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
+    flingPeopleBtn.Parent = mainFrame
+    
+    local btnCorner2 = Instance.new("UICorner")
+    btnCorner2.CornerRadius = UDim.new(0, 8)
+    btnCorner2.Parent = flingPeopleBtn
+    
+    yPos = yPos + 0.13
+    
+    -- 3. ANTI-GRAB (ЗЕЛЁНЫЙ = ВКЛ)
+    local antiGrabBtn = Instance.new("TextButton")
+    antiGrabBtn.Size = UDim2.new(0.85, 0, 0, 45)
+    antiGrabBtn.Position = UDim2.new(0.075, 0, yPos, 0)
+    antiGrabBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+    antiGrabBtn.BackgroundTransparency = 0.3
+    antiGrabBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
+    antiGrabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    antiGrabBtn.Font = Enum.Font.GothamBold
+    antiGrabBtn.TextSize = 17
+    antiGrabBtn.BorderSizePixel = 2
+    antiGrabBtn.BorderColor3 = Color3.fromRGB(0, 200, 0)
+    antiGrabBtn.Parent = mainFrame
+    
+    local btnCorner3 = Instance.new("UICorner")
+    btnCorner3.CornerRadius = UDim.new(0, 8)
+    btnCorner3.Parent = antiGrabBtn
+    
+    yPos = yPos + 0.13
+    
+    -- 4. STOP ALL
+    local stopBtn = Instance.new("TextButton")
+    stopBtn.Size = UDim2.new(0.85, 0, 0, 42)
+    stopBtn.Position = UDim2.new(0.075, 0, yPos + 0.02, 0)
+    stopBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 30)
+    stopBtn.BackgroundTransparency = 0.2
+    stopBtn.Text = "⛔ ОСТАНОВИТЬ ВСЁ"
+    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    stopBtn.Font = Enum.Font.GothamBold
+    stopBtn.TextSize = 18
+    stopBtn.BorderSizePixel = 2
+    stopBtn.BorderColor3 = Color3.fromRGB(200, 0, 50)
+    stopBtn.Parent = mainFrame
+    
+    local btnCorner4 = Instance.new("UICorner")
+    btnCorner4.CornerRadius = UDim.new(0, 8)
+    btnCorner4.Parent = stopBtn
+    
+    yPos = yPos + 0.13
+    
+    -- СПИСОК ИГРОКОВ
+    local listLabel = Instance.new("TextLabel")
+    listLabel.Size = UDim2.new(0.85, 0, 0, 25)
+    listLabel.Position = UDim2.new(0.075, 0, yPos + 0.03, 0)
+    listLabel.BackgroundTransparency = 1
+    listLabel.Text = "🎯 ВЫБЕРИ ЦЕЛЬ (нажми на имя):"
+    listLabel.TextColor3 = Color3.fromRGB(180, 180, 220)
+    listLabel.Font = Enum.Font.GothamSemibold
+    listLabel.TextSize = 13
+    listLabel.TextXAlignment = Enum.TextXAlignment.Left
+    listLabel.Parent = mainFrame
+    
+    yPos = yPos + 0.09
+    
+    local playerListFrame = Instance.new("ScrollingFrame")
+    playerListFrame.Size = UDim2.new(0.85, 0, 0, 80)
+    playerListFrame.Position = UDim2.new(0.075, 0, yPos, 0)
+    playerListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 50)
+    playerListFrame.BackgroundTransparency = 0.5
+    playerListFrame.BorderSizePixel = 2
+    playerListFrame.BorderColor3 = Color3.fromRGB(60, 60, 150)
+    playerListFrame.Parent = mainFrame
+    playerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    playerListFrame.ScrollBarThickness = 6
+    playerListFrame.VerticalScrollBarInset = Enum.ScrollBarInset.Always
+    
+    local listCorner = Instance.new("UICorner")
+    listCorner.CornerRadius = UDim.new(0, 6)
+    listCorner.Parent = playerListFrame
+    
+    -- === ЛОГИКА ===
+    local function updateButtons()
+        -- Fling That
+        if flingActive and targetPlayer then
+            flingThatBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
+            flingThatBtn.BorderColor3 = Color3.fromRGB(0, 255, 80)
+            flingThatBtn.Text = "🎯 FLING THAT [ВКЛ]"
+        else
+            flingThatBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+            flingThatBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
+            flingThatBtn.Text = "🎯 FLING THAT [ВЫКЛ]"
+        end
+        
+        -- Fling People
+        if flingActive and not targetPlayer then
+            flingPeopleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
+            flingPeopleBtn.BorderColor3 = Color3.fromRGB(0, 255, 80)
+            flingPeopleBtn.Text = "👥 FLING PEOPLE [ВКЛ]"
+        else
+            flingPeopleBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+            flingPeopleBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
+            flingPeopleBtn.Text = "👥 FLING PEOPLE [ВЫКЛ]"
+        end
+        
+        -- Anti-Grab
+        if antiGrabActive then
+            antiGrabBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+            antiGrabBtn.BorderColor3 = Color3.fromRGB(0, 255, 0)
+            antiGrabBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
+        else
+            antiGrabBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+            antiGrabBtn.BorderColor3 = Color3.fromRGB(200, 0, 0)
+            antiGrabBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
         end
     end
     
-    local yOffset = 30
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player then
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, -10, 0, 30)
-            btn.Position = UDim2.new(0, 5, 0, yOffset)
-            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-            btn.BackgroundTransparency = 0.3
-            btn.Text = plr.Name
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            btn.Font = Enum.Font.Gotham
-            btn.TextSize = 14
-            btn.TextXAlignment = Enum.TextXAlignment.Left
-            btn.BorderSizePixel = 1
-            btn.BorderColor3 = Color3.fromRGB(80, 80, 120)
-            btn.Parent = playerListFrame
-            
-            local btnCorner = Instance.new("UICorner")
-            btnCorner.CornerRadius = UDim.new(0, 4)
-            btnCorner.Parent = btn
-            
-            btn.MouseButton1Click:Connect(function()
-                targetPlayer = plr
-                statusBar.Text = "➤ Цель: " .. plr.Name
-                -- Визуальное выделение
-                for _, b in ipairs(playerListFrame:GetChildren()) do
-                    if b:IsA("TextButton") then
-                        b.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    -- FLING THAT
+    flingThatBtn.MouseButton1Click:Connect(function()
+        if not targetPlayer then
+            statusBar.Text = "⚠️ СНАЧАЛА ВЫБЕРИ ЦЕЛЬ!"
+            statusBar.TextColor3 = Color3.fromRGB(255, 200, 0)
+            return
+        end
+        
+        if flingActive and targetPlayer then
+            stopFling()
+            statusBar.Text = "✅ FLING THAT ОСТАНОВЛЕН"
+            statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
+            updateButtons()
+            return
+        end
+        
+        if flingActive then stopFling() end
+        startFling(targetPlayer)
+        statusBar.Text = "✅ FLING THAT: " .. targetPlayer.Name
+        statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
+        updateButtons()
+    end)
+    
+    -- FLING PEOPLE
+    flingPeopleBtn.MouseButton1Click:Connect(function()
+        if flingActive and not targetPlayer then
+            stopFling()
+            statusBar.Text = "✅ FLING PEOPLE ОСТАНОВЛЕН"
+            statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
+            updateButtons()
+            return
+        end
+        
+        if flingActive then stopFling() end
+        targetPlayer = nil
+        startFling(nil)
+        statusBar.Text = "✅ FLING PEOPLE: ВСЕ ИГРОКИ"
+        statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
+        updateButtons()
+    end)
+    
+    -- ANTI-GRAB
+    antiGrabBtn.MouseButton1Click:Connect(function()
+        antiGrabActive = not antiGrabActive
+        if antiGrabActive then
+            enableAntiGrab()
+            statusBar.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
+            statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
+        else
+            disableAntiGrab()
+            statusBar.Text = "🛡️ ANTI-GRAB ВЫКЛЮЧЕН"
+            statusBar.TextColor3 = Color3.fromRGB(255, 150, 0)
+        end
+        updateButtons()
+    end)
+    
+    -- STOP ALL
+    stopBtn.MouseButton1Click:Connect(function()
+        stopFling()
+        statusBar.Text = "⛔ ВСЁ ОСТАНОВЛЕНО"
+        statusBar.TextColor3 = Color3.fromRGB(255, 100, 100)
+        updateButtons()
+    end)
+    
+    -- === ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ ===
+    local function updatePlayerList()
+        for _, child in ipairs(playerListFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+        
+        local yOffset = 5
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -10, 0, 28)
+                btn.Position = UDim2.new(0, 5, 0, yOffset)
+                btn.BackgroundColor3 = Color3.fromRGB(45, 45, 70)
+                btn.BackgroundTransparency = 0.3
+                btn.Text = "👤 " .. plr.Name
+                btn.TextColor3 = Color3.fromRGB(220, 220, 255)
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 14
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.BorderSizePixel = 1
+                btn.BorderColor3 = Color3.fromRGB(60, 60, 120)
+                btn.Parent = playerListFrame
+                
+                local btnCorner = Instance.new("UICorner")
+                btnCorner.CornerRadius = UDim.new(0, 4)
+                btnCorner.Parent = btn
+                
+                btn.MouseButton1Click:Connect(function()
+                    targetPlayer = plr
+                    statusBar.Text = "✅ ЦЕЛЬ: " .. plr.Name
+                    statusBar.TextColor3 = Color3.fromRGB(100, 200, 255)
+                    for _, b in ipairs(playerListFrame:GetChildren()) do
+                        if b:IsA("TextButton") then
+                            b.BackgroundColor3 = Color3.fromRGB(45, 45, 70)
+                        end
                     end
-                end
-                btn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
-            end)
-            
-            yOffset = yOffset + 35
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+                    updateButtons()
+                end)
+                
+                yOffset = yOffset + 33
+            end
         end
+        
+        playerListFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
     end
     
-    playerListFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
+    updatePlayerList()
+    Players.PlayerAdded:Connect(updatePlayerList)
+    Players.PlayerRemoving:Connect(updatePlayerList)
+    
+    updateButtons()
+    return screenGui
 end
 
-updatePlayerList()
-
--- Обновление списка при входе/выходе игроков
-Players.PlayerAdded:Connect(updatePlayerList)
-Players.PlayerRemoving:Connect(updatePlayerList)
-
--- === ФУНКЦИИ ФЛИНГА ===
+-- === ФУНКЦИИ ANTI-GRAB ===
 function enableAntiGrab()
     if not character then return end
     pcall(function()
         if humanoid then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
         end
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
+                part.CanCollide = true
                 part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
             end
         end
     end)
 end
 
+function disableAntiGrab()
+    pcall(function()
+        if humanoid then
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+        end
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5, 0.5, 0.5)
+            end
+        end
+    end)
+end
+
+-- === ФУНКЦИИ ФЛИНГА ===
 function startFling(target)
     if flingActive then stopFling() end
     flingActive = true
@@ -303,7 +452,6 @@ function startFling(target)
             return
         end
         
-        -- Флинг всех игроков или конкретного
         local targets = {}
         if target then
             local targetChar = target.Character
@@ -324,28 +472,26 @@ function startFling(target)
         for _, char in ipairs(targets) do
             local root = char:FindFirstChild("HumanoidRootPart")
             if root then
-                local power = math.random(300, 600)
+                local power = math.random(350, 650)
                 local dir = Vector3.new(
                     math.random(-100, 100),
-                    math.random(50, 200),
+                    math.random(80, 250),
                     math.random(-100, 100)
                 ).Unit
                 root.Velocity = dir * power
                 root.RotVelocity = Vector3.new(
-                    math.random(-200, 200),
-                    math.random(-200, 200),
-                    math.random(-200, 200)
+                    math.random(-300, 300),
+                    math.random(-300, 300),
+                    math.random(-300, 300)
                 )
                 
-                -- Урон
                 local hum = char:FindFirstChild("Humanoid")
                 if hum and hum.Health > 0 then
-                    hum:TakeDamage(math.random(5, 25))
+                    hum:TakeDamage(math.random(10, 30))
                 end
             end
         end
         
-        -- Анти-грэб для себя
         if antiGrabActive then enableAntiGrab() end
     end
     
@@ -359,7 +505,7 @@ function stopFling()
         pcall(conn.Disconnect, conn)
     end
     flingConnections = {}
-    -- Сброс скорости всех
+    
     for _, plr in ipairs(Players:GetPlayers()) do
         local char = plr.Character
         if char then
@@ -372,46 +518,6 @@ function stopFling()
     end
 end
 
--- === TOUCH FLING ===
-local touchConnections = {}
-
-function enableTouchFling()
-    if not character then return end
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            local conn = part.Touched:Connect(function(otherPart)
-                if not touchFlingActive then return end
-                local otherChar = otherPart:FindFirstAncestorOfClass("Model")
-                if not otherChar or otherChar == character then return end
-                local otherRoot = otherChar:FindFirstChild("HumanoidRootPart")
-                if not otherRoot then return end
-                
-                local dir = (otherRoot.Position - rootPart.Position).Unit
-                local power = math.random(200, 450)
-                otherRoot.Velocity = dir * power + Vector3.new(0, math.random(50, 200), 0)
-                otherRoot.RotVelocity = Vector3.new(
-                    math.random(-200, 200),
-                    math.random(-200, 200),
-                    math.random(-200, 200)
-                )
-                
-                local otherHum = otherChar:FindFirstChild("Humanoid")
-                if otherHum and otherHum.Health > 0 then
-                    otherHum:TakeDamage(math.random(10, 30))
-                end
-            end)
-            table.insert(touchConnections, conn)
-        end
-    end
-end
-
-function disableTouchFling()
-    for _, conn in ipairs(touchConnections) do
-        pcall(conn.Disconnect, conn)
-    end
-    touchConnections = {}
-end
-
 -- === РЕСПАВН ===
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
@@ -419,25 +525,20 @@ player.CharacterAdded:Connect(function(newChar)
     rootPart = character:WaitForChild("HumanoidRootPart")
     wait(0.5)
     if antiGrabActive then enableAntiGrab() end
-    if touchFlingActive then
-        disableTouchFling()
-        enableTouchFling()
-    end
     if flingActive then
         stopFling()
         startFling(targetPlayer)
     end
 end)
 
--- === ИНИЦИАЛИЗАЦИЯ ===
+-- === ЗАПУСК ===
+createGUI()
 enableAntiGrab()
-print("✅ Ryzen Fling That & People загружен!")
-print("🎯 Выбери игрока в списке и нажми 'FLING THAT'")
-print("👥 Или нажми 'FLING PEOPLE' для флинга всех")
-print("🛡️ Anti Grab включен по умолчанию")
+print("✅ RYZEN FLING ЗАГРУЖЕН!")
+print("📱 Мобильная версия")
+print("🔄 Кнопка '−' сворачивает окно")
+print("✅ Anti-Grab включен по умолчанию")
 
--- Защита от вылета
 game:BindToClose(function()
     stopFling()
-    disableTouchFling()
 end)
