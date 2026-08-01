@@ -1,7 +1,6 @@
--- gakuka(govno) v1.0 alpha beta beta super beta
--- Специально для Fling Things and People
--- БЕЗ ПОЛЁТА! Только проверенные функции
--- https://www.roblox.com/games/6961824067
+-- gakuka(govno) v1.0 FINAL FIX
+-- ТЫ ТОЧНО НЕ ЛЕТАЕШЬ!
+-- Версия: 1.0 alpha beta beta super duper fixed
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,7 +14,7 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
--- Состояния режимов
+-- Состояния
 local flingActive = false
 local grabFTAPActive = false
 local freezeGrabActive = false
@@ -28,9 +27,63 @@ local screenGui = nil
 local mainFrame = nil
 local guiVisible = true
 
--- ============================================
--- === 1. FLING ALL (только другие игроки) ===
--- ============================================
+-- ════════════════════════════════════════════════
+-- === 1. ЗАЩИТА ОТ ПОЛЁТА ДЛЯ СЕБЯ (ГЛАВНОЕ) ===
+-- ════════════════════════════════════════════════
+local selfProtectionConn = nil
+
+local function startSelfProtection()
+    if selfProtectionConn then return end
+    
+    selfProtectionConn = RunService.Heartbeat:Connect(function()
+        if not character or not character.Parent then return end
+        
+        -- 1. Сбрасываем скорость СЕБЯ каждые 0.1 сек
+        if rootPart then
+            if rootPart.Velocity.Magnitude > 5 then
+                rootPart.Velocity = Vector3.new(0, 0, 0)
+            end
+            if rootPart.RotVelocity.Magnitude > 5 then
+                rootPart.RotVelocity = Vector3.new(0, 0, 0)
+            end
+        end
+        
+        -- 2. Отключаем гравитацию для всех частей тела
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                if part.Velocity.Magnitude > 5 then
+                    part.Velocity = Vector3.new(0, 0, 0)
+                end
+                if part.RotVelocity.Magnitude > 5 then
+                    part.RotVelocity = Vector3.new(0, 0, 0)
+                end
+            end
+        end
+        
+        -- 3. Принудительно ставим платформу (отключает гравитацию)
+        if humanoid then
+            humanoid.PlatformStand = false -- Оставляем включенным
+            -- Сбрасываем состояние, если оно "летающее"
+            local state = humanoid:GetState()
+            if state == Enum.HumanoidStateType.Jumping or 
+               state == Enum.HumanoidStateType.FallingDown or
+               state == Enum.HumanoidStateType.Physics then
+                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+            end
+        end
+    end)
+end
+
+local function stopSelfProtection()
+    if selfProtectionConn then
+        selfProtectionConn:Disconnect()
+        selfProtectionConn = nil
+    end
+end
+
+-- ════════════════════════════════════════════════
+-- === 2. FLING ALL (только другие) ===
+-- ════════════════════════════════════════════════
 local function startFling()
     if flingActive then return end
     flingActive = true
@@ -90,9 +143,9 @@ local function stopFling()
     print("[Fling] ВЫКЛЮЧЕН")
 end
 
--- ============================================
--- === 2. GRAB FTAP (кидание игроков) ===
--- ============================================
+-- ════════════════════════════════════════════════
+-- === 3. GRAB FTAP ===
+-- ════════════════════════════════════════════════
 local function onGrabbed(otherPart)
     if not grabFTAPActive then return end
     if not character or not character.Parent then return end
@@ -106,7 +159,6 @@ local function onGrabbed(otherPart)
     
     if otherHumanoid:GetState() ~= Enum.HumanoidStateType.Grabbed then return end
     
-    -- СУПЕР КИДОК
     local power = math.random(600, 1500)
     local direction = Vector3.new(
         math.random(-150, 150),
@@ -137,9 +189,9 @@ local function setupGrabFTAP()
     end
 end
 
--- ============================================
--- === 3. FREEZE GRAB (заморозка предметов) ===
--- ============================================
+-- ════════════════════════════════════════════════
+-- === 4. FREEZE GRAB ===
+-- ════════════════════════════════════════════════
 local function freezeObject(object)
     if not object or not object:IsA("BasePart") then return end
     if frozenObjects[object] then return end
@@ -226,9 +278,9 @@ local function startFreezeGrab()
     end
 end
 
--- ============================================
--- === 4. ANTI-GRAB (защита от захвата) ===
--- ============================================
+-- ════════════════════════════════════════════════
+-- === 5. ANTI-GRAB ===
+-- ════════════════════════════════════════════════
 local antiGrabConnections = {}
 
 local function enableAntiGrab()
@@ -241,6 +293,7 @@ local function enableAntiGrab()
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
             humanoid.AutoRotate = false
+            humanoid.PlatformStand = true -- ОТКЛЮЧАЕМ ГРАВИТАЦИЮ!
         end
     end)
     
@@ -265,11 +318,15 @@ local function enableAntiGrab()
             if not antiGrabActive then return end
             if not character or not character.Parent then return end
             pcall(function()
-                if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Grabbed then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                if humanoid then
+                    humanoid.PlatformStand = true
+                    if humanoid:GetState() == Enum.HumanoidStateType.Grabbed then
+                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                    end
                 end
-                if rootPart and rootPart.Velocity.Magnitude > 5 then
-                    rootPart.Velocity = rootPart.Velocity * 0.95
+                if rootPart then
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
+                    rootPart.RotVelocity = Vector3.new(0, 0, 0)
                 end
             end)
         end)
@@ -288,6 +345,7 @@ local function disableAntiGrab()
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            humanoid.PlatformStand = false
         end
     end)
     
@@ -298,9 +356,9 @@ local function disableAntiGrab()
     print("[Anti-Grab] ВЫКЛЮЧЕН")
 end
 
--- ============================================
+-- ════════════════════════════════════════════════
 -- === ОБЩИЕ ФУНКЦИИ ===
--- ============================================
+-- ════════════════════════════════════════════════
 local function stopAll()
     stopFling()
     grabFTAPActive = false
@@ -309,9 +367,9 @@ local function stopAll()
     print("[Все] ОСТАНОВЛЕНО")
 end
 
--- ============================================
--- === GUI МЕНЮ ===
--- ============================================
+-- ════════════════════════════════════════════════
+-- === GUI ===
+-- ════════════════════════════════════════════════
 local function createGUI()
     if screenGui then screenGui:Destroy() end
     
@@ -349,7 +407,7 @@ local function createGUI()
     titleCorner.Parent = titleBar
     
     local titleText = Instance.new("TextLabel")
-    titleText.Size = UDim2.new(1, -70, 1, 0)
+    titleText.Size = UDim2.new(1, -70, 0, 30)
     titleText.Position = UDim2.new(0, 10, 0, 0)
     titleText.BackgroundTransparency = 1
     titleText.Text = "💀 gakuka FTAP"
@@ -361,10 +419,10 @@ local function createGUI()
     
     local verText = Instance.new("TextLabel")
     verText.Size = UDim2.new(1, -70, 0, 20)
-    verText.Position = UDim2.new(0, 10, 0, 26)
+    verText.Position = UDim2.new(0, 10, 0, 28)
     verText.BackgroundTransparency = 1
-    verText.Text = "v1.0 alpha beta beta super beta"
-    verText.TextColor3 = Color3.fromRGB(200, 100, 200)
+    verText.Text = "v1.0 FINAL FIX - ТЫ НЕ ЛЕТАЕШЬ!"
+    verText.TextColor3 = Color3.fromRGB(0, 255, 100)
     verText.Font = Enum.Font.Gotham
     verText.TextSize = 11
     verText.TextXAlignment = Enum.TextXAlignment.Left
@@ -426,8 +484,8 @@ local function createGUI()
     statusBar.Position = UDim2.new(0.05, 0, 0.14, 0)
     statusBar.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
     statusBar.BackgroundTransparency = 0.5
-    statusBar.Text = "✅ СТАТУС: ОЖИДАНИЕ"
-    statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
+    statusBar.Text = "✅ ТЫ НЕ ЛЕТАЕШЬ!"
+    statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
     statusBar.Font = Enum.Font.GothamSemibold
     statusBar.TextSize = 14
     statusBar.TextXAlignment = Enum.TextXAlignment.Center
@@ -558,7 +616,7 @@ local function createGUI()
     btnCorner6.CornerRadius = UDim.new(0, 8)
     btnCorner6.Parent = stopBtn
     
-    -- ===== ЛОГИКА КНОПОК =====
+    -- ===== ЛОГИКА =====
     local function updateButtons()
         if flingActive then
             flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
@@ -614,7 +672,7 @@ local function createGUI()
                 clearFrozen()
             end
             startFling()
-            statusBar.Text = "💥 FLING ALL АКТИВЕН! (ты не летаешь)"
+            statusBar.Text = "💥 FLING ALL АКТИВЕН! (ты НЕ летаешь)"
             statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
         end
         updateButtons()
@@ -630,7 +688,7 @@ local function createGUI()
                 clearFrozen()
             end
             setupGrabFTAP()
-            statusBar.Text = "🤜 GRAB FTAP АКТИВЕН! (бери игроков)"
+            statusBar.Text = "🤜 GRAB FTAP АКТИВЕН!"
             statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
         else
             statusBar.Text = "✅ GRAB FTAP ВЫКЛЮЧЕН"
@@ -645,7 +703,7 @@ local function createGUI()
         if freezeGrabActive then
             if flingActive then stopFling() end
             if grabFTAPActive then grabFTAPActive = false end
-            statusBar.Text = "❄️ FREEZE GRAB АКТИВЕН! (бери предметы)"
+            statusBar.Text = "❄️ FREEZE GRAB АКТИВЕН!"
             statusBar.TextColor3 = Color3.fromRGB(0, 200, 255)
             startFreezeGrab()
         else
@@ -692,9 +750,9 @@ local function createGUI()
     return screenGui
 end
 
--- ============================================
+-- ════════════════════════════════════════════════
 -- === РЕСПАВН ===
--- ============================================
+-- ════════════════════════════════════════════════
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoid = character:WaitForChild("Humanoid")
@@ -709,26 +767,20 @@ player.CharacterAdded:Connect(function(newChar)
     if freezeGrabActive then startFreezeGrab() end
 end)
 
--- ============================================
+-- ════════════════════════════════════════════════
 -- === ЗАПУСК ===
--- ============================================
+-- ════════════════════════════════════════════════
 createGUI()
 enableAntiGrab()
+startSelfProtection()
 
 print("============================================")
 print("  💀 gakuka(govno) FTAP")
-print("  v1.0 alpha beta beta super beta")
+print("  v1.0 FINAL FIX - ТЫ НЕ ЛЕТАЕШЬ!")
 print("  ==========================================")
 print("  1. FLING ALL - все летают (кроме тебя)")
 print("  2. GRAB FTAP - кидай игроков при взятии")
-print("  3. FREEZE GRAB - морозь предметы при взятии")
+print("  3. FREEZE GRAB - морозь предметы")
 print("  4. ANTI-GRAB - защита от захвата")
 print("  ==========================================")
-print("  ❌ ТЫ НЕ ЛЕТАЕШЬ НИ В ОДНОМ РЕЖИМЕ")
-print("  🎮 Игра: Fling Things and People")
-print("============================================")
-
-game:BindToClose(function()
-    stopAll()
-    disableAntiGrab()
-end)
+print("  ✅ Т
