@@ -1,6 +1,7 @@
--- gakuka(govno) v4.0 (ВСЕ ФУНКЦИИ В ОДНОМ)
--- FLING ALL + GRAB FTAP + FREEZE GRAB + ANTI-GRAB
--- Полный набор для мобильных устройств
+-- gakuka(govno) v1.0 alpha beta beta super beta
+-- Специально для Fling Things and People
+-- БЕЗ ПОЛЁТА! Только проверенные функции
+-- https://www.roblox.com/games/6961824067
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -28,7 +29,7 @@ local mainFrame = nil
 local guiVisible = true
 
 -- ============================================
--- === 1. FLING ALL (все игроки летают) ===
+-- === 1. FLING ALL (только другие игроки) ===
 -- ============================================
 local function startFling()
     if flingActive then return end
@@ -45,17 +46,17 @@ local function startFling()
                 local char = plr.Character
                 if char and char:FindFirstChild("HumanoidRootPart") then
                     local root = char.HumanoidRootPart
-                    local power = math.random(350, 700)
+                    local power = math.random(400, 800)
                     local dir = Vector3.new(
                         math.random(-100, 100),
-                        math.random(50, 250),
+                        math.random(80, 300),
                         math.random(-100, 100)
                     ).Unit
                     root.Velocity = dir * power
                     root.RotVelocity = Vector3.new(
-                        math.random(-300, 300),
-                        math.random(-300, 300),
-                        math.random(-300, 300)
+                        math.random(-400, 400),
+                        math.random(-400, 400),
+                        math.random(-400, 400)
                     )
                 end
             end
@@ -105,24 +106,24 @@ local function onGrabbed(otherPart)
     
     if otherHumanoid:GetState() ~= Enum.HumanoidStateType.Grabbed then return end
     
-    -- КИДАЕМ ДАЛЕКО
-    local power = math.random(500, 1200)
+    -- СУПЕР КИДОК
+    local power = math.random(600, 1500)
     local direction = Vector3.new(
-        math.random(-100, 100),
-        math.random(100, 400),
-        math.random(-100, 100)
+        math.random(-150, 150),
+        math.random(150, 500),
+        math.random(-150, 150)
     ).Unit
     
     otherRoot.Velocity = direction * power
     otherRoot.RotVelocity = Vector3.new(
-        math.random(-500, 500),
-        math.random(-500, 500),
-        math.random(-500, 500)
+        math.random(-600, 600),
+        math.random(-600, 600),
+        math.random(-600, 600)
     )
     
     pcall(function()
         otherHumanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
-        wait(0.1)
+        task.wait(0.1)
         otherHumanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, true)
     end)
 end
@@ -209,7 +210,6 @@ end
 local function startFreezeGrab()
     if not character then return end
     
-    -- Проверяем предметы в руках
     for _, tool in ipairs(character:GetChildren()) do
         if tool:IsA("Tool") or tool:IsA("BasePart") then
             if tool:FindFirstChild("Handle") then
@@ -260,7 +260,6 @@ local function enableAntiGrab()
         end)
     end
     
-    -- Постоянный контроль
     if #antiGrabConnections == 0 then
         local loop = RunService.Heartbeat:Connect(function()
             if not antiGrabActive then return end
@@ -268,6 +267,9 @@ local function enableAntiGrab()
             pcall(function()
                 if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Grabbed then
                     humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                end
+                if rootPart and rootPart.Velocity.Magnitude > 5 then
+                    rootPart.Velocity = rootPart.Velocity * 0.95
                 end
             end)
         end)
@@ -319,8 +321,8 @@ local function createGUI()
     screenGui.ResetOnSpawn = false
     
     mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 480)
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -240)
+    mainFrame.Size = UDim2.new(0, 400, 0, 450)
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -225)
     mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 30)
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 2
@@ -335,7 +337,7 @@ local function createGUI()
     
     -- Заголовок
     local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1, 0, 0, 45)
+    titleBar.Size = UDim2.new(1, 0, 0, 50)
     titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 55)
     titleBar.BackgroundTransparency = 0.2
     titleBar.BorderSizePixel = 2
@@ -350,17 +352,28 @@ local function createGUI()
     titleText.Size = UDim2.new(1, -70, 1, 0)
     titleText.Position = UDim2.new(0, 10, 0, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "💀 gakuka(govno) v4"
+    titleText.Text = "💀 gakuka FTAP"
     titleText.TextColor3 = Color3.fromRGB(255, 50, 200)
     titleText.Font = Enum.Font.GothamBold
     titleText.TextSize = 18
     titleText.TextXAlignment = Enum.TextXAlignment.Left
     titleText.Parent = titleBar
     
+    local verText = Instance.new("TextLabel")
+    verText.Size = UDim2.new(1, -70, 0, 20)
+    verText.Position = UDim2.new(0, 10, 0, 26)
+    verText.BackgroundTransparency = 1
+    verText.Text = "v1.0 alpha beta beta super beta"
+    verText.TextColor3 = Color3.fromRGB(200, 100, 200)
+    verText.Font = Enum.Font.Gotham
+    verText.TextSize = 11
+    verText.TextXAlignment = Enum.TextXAlignment.Left
+    verText.Parent = titleBar
+    
     -- Свернуть
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(0, 35, 0, 35)
-    toggleBtn.Position = UDim2.new(1, -75, 0, 5)
+    toggleBtn.Position = UDim2.new(1, -75, 0, 8)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
     toggleBtn.Text = "−"
     toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -376,11 +389,11 @@ local function createGUI()
     toggleBtn.MouseButton1Click:Connect(function()
         guiVisible = not guiVisible
         if guiVisible then
-            mainFrame.Size = UDim2.new(0, 400, 0, 480)
+            mainFrame.Size = UDim2.new(0, 400, 0, 450)
             toggleBtn.Text = "−"
             toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
         else
-            mainFrame.Size = UDim2.new(0, 400, 0, 45)
+            mainFrame.Size = UDim2.new(0, 400, 0, 50)
             toggleBtn.Text = "+"
             toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
         end
@@ -389,7 +402,7 @@ local function createGUI()
     -- Закрыть
     local closeBtn = Instance.new("TextButton")
     closeBtn.Size = UDim2.new(0, 35, 0, 35)
-    closeBtn.Position = UDim2.new(1, -40, 0, 5)
+    closeBtn.Position = UDim2.new(1, -40, 0, 8)
     closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
     closeBtn.Text = "✕"
     closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -409,14 +422,14 @@ local function createGUI()
     
     -- Статус
     local statusBar = Instance.new("TextLabel")
-    statusBar.Size = UDim2.new(0.9, 0, 0, 25)
-    statusBar.Position = UDim2.new(0.05, 0, 0.12, 0)
+    statusBar.Size = UDim2.new(0.9, 0, 0, 28)
+    statusBar.Position = UDim2.new(0.05, 0, 0.14, 0)
     statusBar.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
     statusBar.BackgroundTransparency = 0.5
     statusBar.Text = "✅ СТАТУС: ОЖИДАНИЕ"
     statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
     statusBar.Font = Enum.Font.GothamSemibold
-    statusBar.TextSize = 13
+    statusBar.TextSize = 14
     statusBar.TextXAlignment = Enum.TextXAlignment.Center
     statusBar.Parent = mainFrame
     
@@ -425,11 +438,11 @@ local function createGUI()
     statusCorner.Parent = statusBar
     
     -- ===== КНОПКИ =====
-    local yPos = 0.18
+    local yPos = 0.20
     
     -- 1. FLING ALL
     local flingBtn = Instance.new("TextButton")
-    flingBtn.Size = UDim2.new(0.85, 0, 0, 40)
+    flingBtn.Size = UDim2.new(0.85, 0, 0, 42)
     flingBtn.Position = UDim2.new(0.075, 0, yPos, 0)
     flingBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
     flingBtn.BackgroundTransparency = 0.3
@@ -445,11 +458,11 @@ local function createGUI()
     btnCorner1.CornerRadius = UDim.new(0, 8)
     btnCorner1.Parent = flingBtn
     
-    yPos = yPos + 0.11
+    yPos = yPos + 0.12
     
     -- 2. GRAB FTAP
     local grabBtn = Instance.new("TextButton")
-    grabBtn.Size = UDim2.new(0.85, 0, 0, 40)
+    grabBtn.Size = UDim2.new(0.85, 0, 0, 42)
     grabBtn.Position = UDim2.new(0.075, 0, yPos, 0)
     grabBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
     grabBtn.BackgroundTransparency = 0.3
@@ -465,11 +478,11 @@ local function createGUI()
     btnCorner2.CornerRadius = UDim.new(0, 8)
     btnCorner2.Parent = grabBtn
     
-    yPos = yPos + 0.11
+    yPos = yPos + 0.12
     
     -- 3. FREEZE GRAB
     local freezeBtn = Instance.new("TextButton")
-    freezeBtn.Size = UDim2.new(0.85, 0, 0, 40)
+    freezeBtn.Size = UDim2.new(0.85, 0, 0, 42)
     freezeBtn.Position = UDim2.new(0.075, 0, yPos, 0)
     freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
     freezeBtn.BackgroundTransparency = 0.3
@@ -485,11 +498,11 @@ local function createGUI()
     btnCorner3.CornerRadius = UDim.new(0, 8)
     btnCorner3.Parent = freezeBtn
     
-    yPos = yPos + 0.11
+    yPos = yPos + 0.12
     
     -- 4. ANTI-GRAB
     local antiBtn = Instance.new("TextButton")
-    antiBtn.Size = UDim2.new(0.85, 0, 0, 40)
+    antiBtn.Size = UDim2.new(0.85, 0, 0, 42)
     antiBtn.Position = UDim2.new(0.075, 0, yPos, 0)
     antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
     antiBtn.BackgroundTransparency = 0.3
@@ -505,7 +518,7 @@ local function createGUI()
     btnCorner4.CornerRadius = UDim.new(0, 8)
     btnCorner4.Parent = antiBtn
     
-    yPos = yPos + 0.11
+    yPos = yPos + 0.12
     
     -- 5. CLEAR FROZEN
     local clearBtn = Instance.new("TextButton")
@@ -529,7 +542,7 @@ local function createGUI()
     
     -- 6. STOP ALL
     local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(0.85, 0, 0, 38)
+    stopBtn.Size = UDim2.new(0.85, 0, 0, 40)
     stopBtn.Position = UDim2.new(0.075, 0, yPos + 0.01, 0)
     stopBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 30)
     stopBtn.BackgroundTransparency = 0.2
@@ -601,7 +614,7 @@ local function createGUI()
                 clearFrozen()
             end
             startFling()
-            statusBar.Text = "💥 FLING ALL АКТИВЕН!"
+            statusBar.Text = "💥 FLING ALL АКТИВЕН! (ты не летаешь)"
             statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
         end
         updateButtons()
@@ -617,7 +630,7 @@ local function createGUI()
                 clearFrozen()
             end
             setupGrabFTAP()
-            statusBar.Text = "🤜 GRAB FTAP АКТИВЕН!"
+            statusBar.Text = "🤜 GRAB FTAP АКТИВЕН! (бери игроков)"
             statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
         else
             statusBar.Text = "✅ GRAB FTAP ВЫКЛЮЧЕН"
@@ -632,7 +645,7 @@ local function createGUI()
         if freezeGrabActive then
             if flingActive then stopFling() end
             if grabFTAPActive then grabFTAPActive = false end
-            statusBar.Text = "❄️ FREEZE GRAB АКТИВЕН!"
+            statusBar.Text = "❄️ FREEZE GRAB АКТИВЕН! (бери предметы)"
             statusBar.TextColor3 = Color3.fromRGB(0, 200, 255)
             startFreezeGrab()
         else
@@ -702,16 +715,18 @@ end)
 createGUI()
 enableAntiGrab()
 
-print("====================================")
-print("  💀 gakuka(govno) v4.0")
-print("  ===============================")
-print("  1. FLING ALL - все летают")
-print("  2. GRAB FTAP - кидай игроков")
-print("  3. FREEZE GRAB - морозь предметы")
+print("============================================")
+print("  💀 gakuka(govno) FTAP")
+print("  v1.0 alpha beta beta super beta")
+print("  ==========================================")
+print("  1. FLING ALL - все летают (кроме тебя)")
+print("  2. GRAB FTAP - кидай игроков при взятии")
+print("  3. FREEZE GRAB - морозь предметы при взятии")
 print("  4. ANTI-GRAB - защита от захвата")
-print("  ===============================")
-print("  ❌ ТЫ НЕ ЛЕТАЕШЬ")
-print("====================================")
+print("  ==========================================")
+print("  ❌ ТЫ НЕ ЛЕТАЕШЬ НИ В ОДНОМ РЕЖИМЕ")
+print("  🎮 Игра: Fling Things and People")
+print("============================================")
 
 game:BindToClose(function()
     stopAll()
