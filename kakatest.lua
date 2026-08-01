@@ -1,5 +1,5 @@
--- gakuka FTAP - РАБОЧАЯ ВЕРСИЯ (FREEZE GRAB + FLING ALL)
--- Без глюков, без полёта, без GRAB FTAP
+-- gakuka FTAP - FIXED (Без тормозов, без багов)
+-- Исправлено: медлительность, баг с кнопками
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -19,37 +19,76 @@ local connections = {}
 local touchConnections = {}
 
 -- ========================================
--- === ЗАЩИТА ОТ ПОЛЁТА ===
+-- === ФИКС МЕДЛИТЕЛЬНОСТИ ===
 -- ========================================
-local function protectSelf()
-    if rootPart then
-        rootPart.Velocity = Vector3.new(0, 0, 0)
-        rootPart.RotVelocity = Vector3.new(0, 0, 0)
-    end
+local function fixSlowness()
+    pcall(function()
+        if humanoid then
+            -- ВОЗВРАЩАЕМ НОРМАЛЬНУЮ СКОРОСТЬ
+            humanoid.WalkSpeed = 16 -- стандарт
+            humanoid.JumpPower = 50 -- стандарт
+            humanoid.AutoRotate = true
+            -- ОТКЛЮЧАЕМ PlatformStand (он вызывает тормоза)
+            humanoid.PlatformStand = false
+            -- Включаем все состояния обратно
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+        end
+    end)
+    
+    -- ВОЗВРАЩАЕМ НОРМАЛЬНУЮ ФИЗИКУ
     for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") and part ~= rootPart then
-            part.Velocity = Vector3.new(0, 0, 0)
-            part.RotVelocity = Vector3.new(0, 0, 0)
+        if part:IsA("BasePart") then
+            pcall(function()
+                part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5, 0.5, 0.5)
+            end)
         end
     end
 end
 
 -- ========================================
--- === ANTI-GRAB ===
+-- === ЗАЩИТА ОТ ПОЛЁТА (БЕЗ ТОРМОЗОВ) ===
 -- ========================================
-local function enableAntiGrab()
-    pcall(function()
-        if humanoid then
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
-            humanoid.AutoRotate = false
-        end
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+local function protectSelf()
+    -- ТОЛЬКО СБРАСЫВАЕМ СКОРОСТЬ ЕСЛИ ОНА СЛИШКОМ БОЛЬШАЯ
+    if rootPart and rootPart.Velocity.Magnitude > 100 then
+        rootPart.Velocity = Vector3.new(0, 0, 0)
+        rootPart.RotVelocity = Vector3.new(0, 0, 0)
+    end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part ~= rootPart then
+            if part.Velocity.Magnitude > 100 then
+                part.Velocity = Vector3.new(0, 0, 0)
+                part.RotVelocity = Vector3.new(0, 0, 0)
             end
         end
+    end
+end
+
+-- ========================================
+-- === ANTI-GRAB (БЕЗ ТОРМОЗОВ) ===
+-- ========================================
+local function enableAntiGrab()
+    fixSlowness() -- ВОЗВРАЩАЕМ НОРМАЛЬНУЮ СКОРОСТЬ
+    pcall(function()
+        if humanoid then
+            -- ТОЛЬКО ЗАПРЕЩАЕМ ГРАБ, ВСЁ ОСТАЛЬНОЕ РАЗРЕШАЕМ
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            humanoid.AutoRotate = true
+            humanoid.PlatformStand = false -- ВАЖНО!
+        end
     end)
+    print("[Anti-Grab] ВКЛЮЧЕН")
 end
 
 -- ========================================
@@ -58,6 +97,7 @@ end
 local function startFling()
     if flingActive then return end
     flingActive = true
+    fixSlowness()
     
     local conn = RunService.Heartbeat:Connect(function()
         if not flingActive then return end
@@ -93,6 +133,7 @@ local function stopFling()
         pcall(conn.Disconnect, conn)
     end
     connections = {}
+    fixSlowness()
     print("[Fling] ВЫКЛЮЧЕН")
 end
 
@@ -181,8 +222,6 @@ local function setupFreezeGrab()
                 
                 local otherCharacter = otherPart:FindFirstAncestorOfClass("Model")
                 if not otherCharacter or otherCharacter == character then return end
-                
-                -- Проверяем что это предмет (не игрок)
                 if otherCharacter:FindFirstChild("Humanoid") then return end
                 
                 local partToFreeze = otherPart
@@ -234,7 +273,7 @@ status.Size = UDim2.new(0.9, 0, 0, 25)
 status.Position = UDim2.new(0.05, 0, 0.18, 0)
 status.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
 status.BackgroundTransparency = 0.5
-status.Text = "✅ ТЫ НЕ ЛЕТАЕШЬ!"
+status.Text = "✅ ГОТОВ"
 status.TextColor3 = Color3.fromRGB(0, 255, 100)
 status.Font = Enum.Font.GothamSemibold
 status.TextSize = 13
@@ -285,7 +324,7 @@ local flingBtn = createBtn("💥 FLING ALL [ВЫКЛ]", 0.26, Color3.fromRGB(200
         startFling()
         flingBtn.Text = "💥 FLING ALL [ВКЛ]"
         flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-        status.Text = "💥 FLING АКТИВЕН! (ты не летаешь)"
+        status.Text = "💥 FLING АКТИВЕН!"
         status.TextColor3 = Color3.fromRGB(0, 255, 100)
     end
 end)
@@ -302,7 +341,7 @@ local freezeBtn = createBtn("❄️ FREEZE GRAB [ВЫКЛ]", 0.40, Color3.fromRG
         setupFreezeGrab()
         freezeBtn.Text = "❄️ FREEZE GRAB [ВКЛ]"
         freezeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-        status.Text = "❄️ FREEZE GRAB АКТИВЕН! (бери предметы)"
+        status.Text = "❄️ FREEZE GRAB АКТИВЕН!"
         status.TextColor3 = Color3.fromRGB(0, 200, 255)
     else
         clearFrozen()
@@ -350,6 +389,7 @@ local stopBtn = createBtn("⛔ ОСТАНОВИТЬ ВСЁ", 0.80, Color3.fromRG
     freezeBtn.Text = "❄️ FREEZE GRAB [ВЫКЛ]"
     freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
     
+    fixSlowness()
     status.Text = "⛔ ВСЁ ОСТАНОВЛЕНО"
     status.TextColor3 = Color3.fromRGB(255, 100, 100)
 end)
@@ -373,18 +413,25 @@ closeCorner.Parent = closeBtn
 closeBtn.MouseButton1Click:Connect(function()
     stopFling()
     clearFrozen()
+    fixSlowness()
     screenGui:Destroy()
 end)
 
 -- ========================================
 -- === ИНИЦИАЛИЗАЦИЯ ===
 -- ========================================
+fixSlowness()
 enableAntiGrab()
 
--- Защита от полёта (постоянная)
+-- Защита от полёта (мягкая, без тормозов)
 RunService.Heartbeat:Connect(function()
     if character and character.Parent then
         protectSelf()
+        -- ВОЗВРАЩАЕМ СКОРОСТЬ ЕСЛИ ОНА СБИТА
+        if humanoid and humanoid.WalkSpeed < 15 then
+            humanoid.WalkSpeed = 16
+            humanoid.JumpPower = 50
+        end
     end
 end)
 
@@ -394,6 +441,7 @@ player.CharacterAdded:Connect(function(newChar)
     humanoid = character:WaitForChild("Humanoid")
     rootPart = character:WaitForChild("HumanoidRootPart")
     wait(0.5)
+    fixSlowness()
     if antiGrabActive then enableAntiGrab() end
     if flingActive then
         stopFling()
@@ -405,8 +453,9 @@ player.CharacterAdded:Connect(function(newChar)
 end)
 
 print("====================================")
-print("  💀 gakuka FTAP - РАБОЧАЯ")
+print("  💀 gakuka FTAP - FIXED")
 print("  ✅ ТЫ НЕ ЛЕТАЕШЬ")
+print("  ✅ ТЫ НЕ ТОРМОЗИШЬ")
 print("  =================================")
 print("  1. FLING ALL - все летают")
 print("  2. FREEZE GRAB - морозь предметы")
