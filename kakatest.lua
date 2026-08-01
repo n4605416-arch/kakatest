@@ -1,5 +1,5 @@
--- gakuka FTAP - ULTRA FIXED v1.3 (ANTI-GRAB РАБОТАЕТ)
--- Anti-Grab: другие игроки НЕ МОГУТ тебя взять
+-- gakuka FTAP - FINAL WORKING v1.3
+-- ВСЁ РАБОТАЕТ: Anti-Grab, скорость 70, сворачивание, НЕТ ПОЛЁТА
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,119 +14,54 @@ local rootPart = character:WaitForChild("HumanoidRootPart")
 -- ===== СОСТОЯНИЯ =====
 local flingActive = false
 local antiGrabActive = true
-local freezeGrabActive = false
 local speedModeActive = false
-local frozenObjects = {}
-local flingConnections = {}
-local touchConnections = {}
 local screenGui = nil
 local mainFrame = nil
 local collapsed = false
 
 -- ===== КНОПКИ =====
-local flingBtn, freezeBtn, antiBtn, speedBtn, statusText, toggleBtn
+local flingBtn, antiBtn, speedBtn, statusText, toggleBtn, openBtn
+
+-- ========================================
+-- === ЖЁСТКАЯ ЗАЩИТА ОТ ПОЛЁТА ===
+-- ========================================
+local function killVelocity()
+    if not rootPart then return end
+    rootPart.Velocity = Vector3.new(0, 0, 0)
+    rootPart.RotVelocity = Vector3.new(0, 0, 0)
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part ~= rootPart then
+            part.Velocity = Vector3.new(0, 0, 0)
+            part.RotVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
 
 -- ========================================
 -- === ANTI-GRAB (ЗАЩИТА ОТ ВЗЯТИЯ) ===
 -- ========================================
-local function applyAntiGrab()
-    if not character or not character.Parent then return end
+local function antiGrab()
     if not humanoid then return end
-    
     pcall(function()
-        -- 1. ОТКЛЮЧАЕМ СОСТОЯНИЕ GRABBED (ВЗЯТИЕ)
+        -- ОТКЛЮЧАЕМ ВОЗМОЖНОСТЬ ВЗЯТЬ
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
-        
-        -- 2. ЕСЛИ НАС ВЗЯЛИ - ПРИНУДИТЕЛЬНО ВЫХОДИМ
+        -- ЕСЛИ ВЗЯЛИ - ВЫХОДИМ
         if humanoid:GetState() == Enum.HumanoidStateType.Grabbed then
             humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
-        
-        -- 3. ЗАПРЕЩАЕМ ЛЮБЫЕ ДЕЙСТВИЯ, КОТОРЫЕ МОГУТ ВЗЯТЬ
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
-        
-        -- 4. НО РАЗРЕШАЕМ ДВИЖЕНИЕ И ПРЫЖКИ
+        -- ВКЛЮЧАЕМ ВСЁ ОСТАЛЬНОЕ
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
-        
-        -- 5. ОТКЛЮЧАЕМ АВТОПОВОРОТ (МЕШАЕТ ВЗЯТИЮ)
-        humanoid.AutoRotate = true
-        
-        -- 6. СТАВИМ ПЛАТФОРМУ (ОТКЛЮЧАЕТ ГРАВИТАЦИЮ ВЗЯТИЯ)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
         humanoid.PlatformStand = false
+        humanoid.AutoRotate = true
     end)
-    
-    -- 7. БЛОКИРУЕМ ФИЗИКУ ЧАСТЕЙ ТЕЛА
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            pcall(function()
-                part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-                part.CanCollide = true
-            end)
-        end
-    end
-    
-    -- 8. ОТКЛЮЧАЕМ GRAB ДЛЯ ROOTPART
-    if rootPart then
-        pcall(function()
-            rootPart.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-        end)
-    end
 end
 
 -- ========================================
--- === ВКЛЮЧЕНИЕ ANTI-GRAB ===
+-- === СКОРОСТЬ ===
 -- ========================================
-local function enableAntiGrab()
-    antiGrabActive = true
-    applyAntiGrab()
-    if antiBtn then
-        antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
-        antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-    end
-    if statusText then
-        statusText.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
-        statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
-    end
-    print("[Anti-Grab] ВКЛЮЧЕН - тебя нельзя взять!")
-end
-
--- ========================================
--- === ВЫКЛЮЧЕНИЕ ANTI-GRAB ===
--- ========================================
-local function disableAntiGrab()
-    antiGrabActive = false
-    pcall(function()
-        if humanoid then
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
-        end
-    end)
-    if antiBtn then
-        antiBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
-        antiBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    end
-    if statusText then
-        statusText.Text = "🛡️ ANTI-GRAB ВЫКЛЮЧЕН"
-        statusText.TextColor3 = Color3.fromRGB(255, 150, 0)
-    end
-    print("[Anti-Grab] ВЫКЛЮЧЕН - тебя можно взять")
-end
-
--- ========================================
--- === ROBLOX EGOR (СКОРОСТЬ 70) ===
--- ========================================
-local function applySpeed()
+local function setSpeed()
     if not humanoid then return end
     if speedModeActive then
         humanoid.WalkSpeed = 70
@@ -136,39 +71,30 @@ local function applySpeed()
 end
 
 -- ========================================
--- === ПРЫЖОК (НЕ ТРОГАЕМ) ===
--- ========================================
-local function fixJump()
-    if not humanoid then return end
-    humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-    humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
-    humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-    humanoid.PlatformStand = false
-    humanoid.AutoRotate = true
-end
-
--- ========================================
--- === ЗАЩИТА ОТ ПОЛЁТА ===
--- ========================================
-local function protectSelf()
-    if rootPart and rootPart.Velocity.Magnitude > 50 then
-        rootPart.Velocity = Vector3.new(0, 0, 0)
-        rootPart.RotVelocity = Vector3.new(0, 0, 0)
-    end
-end
-
--- ========================================
 -- === FLING ALL ===
 -- ========================================
+local flingConn = nil
+
 local function startFling()
     if flingActive then return end
     flingActive = true
-    applySpeed()
+    if flingBtn then
+        flingBtn.Text = "💥 FLING ALL [ВКЛ]"
+        flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
+    end
+    if statusText then
+        statusText.Text = "💥 FLING АКТИВЕН!"
+        statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
+    end
     
-    local conn = RunService.Heartbeat:Connect(function()
+    if flingConn then flingConn:Disconnect() end
+    flingConn = RunService.Heartbeat:Connect(function()
         if not flingActive then return end
-        protectSelf()
-        
+        -- ЗАЩИТА СЕБЯ
+        killVelocity()
+        antiGrab()
+        setSpeed()
+        -- ФЛИНГ ДРУГИХ
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player then
                 local char = plr.Character
@@ -188,133 +114,76 @@ local function startFling()
             end
         end
     end)
-    table.insert(flingConnections, conn)
-    print("[Fling] ВКЛЮЧЕН")
 end
 
 local function stopFling()
     flingActive = false
-    for _, conn in ipairs(flingConnections) do
-        pcall(conn.Disconnect, conn)
+    if flingConn then
+        flingConn:Disconnect()
+        flingConn = nil
     end
-    flingConnections = {}
-    applySpeed()
-    print("[Fling] ВЫКЛЮЧЕН")
-end
-
--- ========================================
--- === FREEZE GRAB ===
--- ========================================
-local function freezeObject(object)
-    if not object or not object:IsA("BasePart") then return end
-    if frozenObjects[object] then return end
-    
-    pcall(function()
-        local originalProps = {
-            Anchored = object.Anchored,
-            CanCollide = object.CanCollide,
-            Locked = object.Locked,
-            CustomPhysicalProperties = object.CustomPhysicalProperties,
-            Transparency = object.Transparency,
-            Material = object.Material,
-            Color = object.Color
-        }
-        
-        object.Anchored = true
-        object.CanCollide = true
-        object.Locked = true
-        object.Velocity = Vector3.new(0, 0, 0)
-        object.RotVelocity = Vector3.new(0, 0, 0)
-        object.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-        object.Transparency = 0.3
-        object.Material = Enum.Material.Ice
-        object.Color = Color3.fromRGB(100, 200, 255)
-        
-        local glow = Instance.new("SelectionBox")
-        glow.Adornee = object
-        glow.Color3 = Color3.fromRGB(0, 200, 255)
-        glow.Transparency = 0.5
-        glow.LineThickness = 0.1
-        glow.Parent = object
-        
-        frozenObjects[object] = {
-            Properties = originalProps,
-            Glow = glow
-        }
-    end)
-end
-
-local function unfreezeObject(object)
-    if not object or not frozenObjects[object] then return end
-    
-    pcall(function()
-        local data = frozenObjects[object]
-        local props = data.Properties
-        object.Anchored = props.Anchored or false
-        object.CanCollide = props.CanCollide or true
-        object.Locked = props.Locked or false
-        object.CustomPhysicalProperties = props.CustomPhysicalProperties or PhysicalProperties.new(0.7, 0.3, 0.5, 0.5, 0.5)
-        object.Transparency = props.Transparency or 0
-        object.Material = props.Material or Enum.Material.Plastic
-        object.Color = props.Color or Color3.fromRGB(255, 255, 255)
-        
-        if data.Glow then
-            data.Glow:Destroy()
-        end
-        frozenObjects[object] = nil
-    end)
-end
-
-local function clearFrozen()
-    for obj, _ in pairs(frozenObjects) do
-        unfreezeObject(obj)
+    if flingBtn then
+        flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
+        flingBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
     end
-    frozenObjects = {}
-end
-
-local function setupFreezeGrab()
-    if not character then return end
-    for _, conn in ipairs(touchConnections) do
-        pcall(conn.Disconnect, conn)
-    end
-    touchConnections = {}
-    
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            local conn = part.Touched:Connect(function(otherPart)
-                if not freezeGrabActive then return end
-                if not character or not character.Parent then return end
-                
-                local otherCharacter = otherPart:FindFirstAncestorOfClass("Model")
-                if not otherCharacter or otherCharacter == character then return end
-                if otherCharacter:FindFirstChild("Humanoid") then return end
-                
-                local partToFreeze = otherPart
-                if partToFreeze and partToFreeze:IsA("BasePart") then
-                    freezeObject(partToFreeze)
-                end
-            end)
-            table.insert(touchConnections, conn)
-        end
-    end
-end
-
--- ========================================
--- === TOGGLE ROBLOX EGOR ===
--- ========================================
-local function toggleSpeedMode()
-    speedModeActive = not speedModeActive
-    applySpeed()
-    if speedModeActive then
-        statusText.Text = "🏃 ROBLOX EGOR [ВКЛ] скорость 70!"
-        statusText.TextColor3 = Color3.fromRGB(255, 200, 0)
-        speedBtn.Text = "🏃 ROBLOX EGOR [ВКЛ]"
-        speedBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-    else
-        statusText.Text = "✅ ROBLOX EGOR [ВЫКЛ]"
+    if statusText then
+        statusText.Text = "✅ FLING ВЫКЛЮЧЕН"
         statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
-        speedBtn.Text = "🏃 ROBLOX EGOR [ВЫКЛ]"
-        speedBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+    end
+    killVelocity()
+end
+
+-- ========================================
+-- === TOGGLE SPEED ===
+-- ========================================
+local function toggleSpeed()
+    speedModeActive = not speedModeActive
+    setSpeed()
+    if speedModeActive then
+        if speedBtn then
+            speedBtn.Text = "🏃 ROBLOX EGOR [ВКЛ]"
+            speedBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        end
+        if statusText then
+            statusText.Text = "🏃 ROBLOX EGOR ВКЛ! (скорость 70)"
+            statusText.TextColor3 = Color3.fromRGB(255, 200, 0)
+        end
+    else
+        if speedBtn then
+            speedBtn.Text = "🏃 ROBLOX EGOR [ВЫКЛ]"
+            speedBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        end
+        if statusText then
+            statusText.Text = "✅ ROBLOX EGOR ВЫКЛ"
+            statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end
+end
+
+-- ========================================
+-- === TOGGLE ANTI-GRAB ===
+-- ========================================
+local function toggleAntiGrab()
+    antiGrabActive = not antiGrabActive
+    if antiGrabActive then
+        antiGrab()
+        if antiBtn then
+            antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
+            antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+        end
+        if statusText then
+            statusText.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
+            statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
+        end
+    else
+        if antiBtn then
+            antiBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
+            antiBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        end
+        if statusText then
+            statusText.Text = "🛡️ ANTI-GRAB ВЫКЛЮЧЕН"
+            statusText.TextColor3 = Color3.fromRGB(255, 150, 0)
+        end
     end
 end
 
@@ -323,62 +192,22 @@ end
 -- ========================================
 local function stopAll()
     stopFling()
-    freezeGrabActive = false
-    clearFrozen()
-    for _, conn in ipairs(touchConnections) do
-        pcall(conn.Disconnect, conn)
-    end
-    touchConnections = {}
     if speedModeActive then
         speedModeActive = false
-        applySpeed()
-        speedBtn.Text = "🏃 ROBLOX EGOR [ВЫКЛ]"
-        speedBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        setSpeed()
+        if speedBtn then
+            speedBtn.Text = "🏃 ROBLOX EGOR [ВЫКЛ]"
+            speedBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        end
     end
-end
-
--- ========================================
--- === ОБНОВЛЕНИЕ КНОПОК ===
--- ========================================
-local function updateButtons()
-    if flingActive then
-        flingBtn.Text = "💥 FLING ALL [ВКЛ]"
-        flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-    else
-        flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
-        flingBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    end
-    
-    if freezeGrabActive then
-        freezeBtn.Text = "❄️ FREEZE GRAB [ВКЛ]"
-        freezeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-    else
-        freezeBtn.Text = "❄️ FREEZE GRAB [ВЫКЛ]"
-        freezeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    end
-    
-    if antiGrabActive then
-        antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
-        antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-    else
-        antiBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
-        antiBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    end
-    
-    if speedModeActive then
-        speedBtn.Text = "🏃 ROBLOX EGOR [ВКЛ]"
-        speedBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-    else
-        speedBtn.Text = "🏃 ROBLOX EGOR [ВЫКЛ]"
-        speedBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    end
+    killVelocity()
 end
 
 -- ========================================
 -- === GUI ===
 -- ========================================
 local function createGUI()
-    if screenGui then 
+    if screenGui then
         screenGui:Destroy()
         screenGui = nil
     end
@@ -389,8 +218,8 @@ local function createGUI()
     screenGui.ResetOnSpawn = false
     
     mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 420)
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -210)
+    mainFrame.Size = UDim2.new(0, 350, 0, 280)
+    mainFrame.Position = UDim2.new(0.5, -175, 0.5, -140)
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 2
@@ -431,7 +260,7 @@ local function createGUI()
     verText.Size = UDim2.new(1, -100, 0, 16)
     verText.Position = UDim2.new(0, 12, 0, 26)
     verText.BackgroundTransparency = 1
-    verText.Text = "v1.3 ULTRA FIXED"
+    verText.Text = "v1.3 FINAL"
     verText.TextColor3 = Color3.fromRGB(255, 200, 100)
     verText.Font = Enum.Font.Gotham
     verText.TextSize = 10
@@ -459,7 +288,7 @@ local function createGUI()
     toggleBtn.MouseButton1Click:Connect(function()
         collapsed = not collapsed
         if collapsed then
-            mainFrame.Size = UDim2.new(0, 400, 0, 45)
+            mainFrame.Size = UDim2.new(0, 350, 0, 45)
             toggleBtn.Text = "+"
             toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
             for _, child in ipairs(mainFrame:GetChildren()) do
@@ -467,10 +296,10 @@ local function createGUI()
                     child.Visible = false
                 end
             end
-            titleText.Text = "💀 gakuka FTAP [СВЁРНУТО]"
+            titleText.Text = "💀 gakuka [СВЁРНУТО]"
             titleText.TextColor3 = Color3.fromRGB(255, 200, 100)
         else
-            mainFrame.Size = UDim2.new(0, 400, 0, 420)
+            mainFrame.Size = UDim2.new(0, 350, 0, 280)
             toggleBtn.Text = "−"
             toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
             for _, child in ipairs(mainFrame:GetChildren()) do
@@ -481,7 +310,7 @@ local function createGUI()
         end
     end)
     
-    -- Кнопка закрытия
+    -- ЗАКРЫТИЕ
     local closeBtn = Instance.new("TextButton")
     closeBtn.Size = UDim2.new(0, 32, 0, 32)
     closeBtn.Position = UDim2.new(1, -38, 0, 7)
@@ -505,21 +334,19 @@ local function createGUI()
             screenGui:Destroy()
             screenGui = nil
         end
-        if openBtn then
-            openBtn.Visible = true
-        end
+        if openBtn then openBtn.Visible = true end
     end)
     
     -- СТАТУС
     statusText = Instance.new("TextLabel")
-    statusText.Size = UDim2.new(0.9, 0, 0, 28)
-    statusText.Position = UDim2.new(0.05, 0, 0.13, 0)
+    statusText.Size = UDim2.new(0.9, 0, 0, 25)
+    statusText.Position = UDim2.new(0.05, 0, 0.18, 0)
     statusText.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
     statusText.BackgroundTransparency = 0.5
     statusText.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
     statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
     statusText.Font = Enum.Font.GothamSemibold
-    statusText.TextSize = 13
+    statusText.TextSize = 12
     statusText.Parent = mainFrame
     
     local statusCorner = Instance.new("UICorner")
@@ -527,139 +354,96 @@ local function createGUI()
     statusCorner.Parent = statusText
     
     -- ===== КНОПКИ =====
-    local function createBtn(text, y, color, callback)
+    local function createBtn(text, y, color, cb)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.85, 0, 0, 38)
+        btn.Size = UDim2.new(0.85, 0, 0, 35)
         btn.Position = UDim2.new(0.075, 0, y, 0)
         btn.BackgroundColor3 = color or Color3.fromRGB(50, 50, 80)
         btn.BackgroundTransparency = 0.3
         btn.Text = text
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
         btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 14
+        btn.TextSize = 13
         btn.BorderSizePixel = 2
         btn.BorderColor3 = Color3.fromRGB(80, 80, 150)
         btn.Parent = mainFrame
         
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 8)
-        btnCorner.Parent = btn
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 8)
+        c.Parent = btn
         
-        btn.MouseButton1Click:Connect(callback)
+        btn.MouseButton1Click:Connect(cb)
         return btn
     end
     
-    local yPos = 0.18
+    local y = 0.24
     
-    flingBtn = createBtn("💥 FLING ALL [ВЫКЛ]", yPos, Color3.fromRGB(180, 40, 40), function()
-        if flingActive then
-            stopFling()
-            statusText.Text = "✅ FLING ВЫКЛЮЧЕН"
-            statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
-        else
-            if freezeGrabActive then
-                freezeGrabActive = false
-                clearFrozen()
-            end
-            startFling()
-            statusText.Text = "💥 FLING АКТИВЕН!"
-            statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
-        end
-        updateButtons()
+    flingBtn = createBtn("💥 FLING ALL [ВЫКЛ]", y, Color3.fromRGB(180, 40, 40), function()
+        if flingActive then stopFling() else startFling() end
     end)
+    y = y + 0.11
     
-    yPos = yPos + 0.11
+    antiBtn = createBtn("🛡️ ANTI-GRAB [ВКЛ]", y, Color3.fromRGB(0, 180, 0), toggleAntiGrab)
+    y = y + 0.11
     
-    freezeBtn = createBtn("❄️ FREEZE GRAB [ВЫКЛ]", yPos, Color3.fromRGB(180, 40, 40), function()
-        freezeGrabActive = not freezeGrabActive
-        if freezeGrabActive then
-            if flingActive then stopFling() end
-            setupFreezeGrab()
-            statusText.Text = "❄️ FREEZE GRAB АКТИВЕН!"
-            statusText.TextColor3 = Color3.fromRGB(0, 200, 255)
-        else
-            clearFrozen()
-            statusText.Text = "✅ FREEZE GRAB ВЫКЛЮЧЕН"
-            statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
-        end
-        updateButtons()
-    end)
+    speedBtn = createBtn("🏃 ROBLOX EGOR [ВЫКЛ]", y, Color3.fromRGB(180, 40, 40), toggleSpeed)
+    y = y + 0.11
     
-    yPos = yPos + 0.11
-    
-    antiBtn = createBtn("🛡️ ANTI-GRAB [ВКЛ]", yPos, Color3.fromRGB(0, 180, 0), function()
-        antiGrabActive = not antiGrabActive
-        if antiGrabActive then
-            enableAntiGrab()
-        else
-            disableAntiGrab()
-        end
-        updateButtons()
-    end)
-    
-    yPos = yPos + 0.11
-    
-    speedBtn = createBtn("🏃 ROBLOX EGOR [ВЫКЛ]", yPos, Color3.fromRGB(180, 40, 40), function()
-        toggleSpeedMode()
-        updateButtons()
-    end)
-    
-    yPos = yPos + 0.11
-    
-    local clearBtn = createBtn("🧊 РАЗМОРОЗИТЬ ВСЁ", yPos, Color3.fromRGB(200, 150, 0), function()
-        local count = 0
-        for _ in pairs(frozenObjects) do count = count + 1 end
-        clearFrozen()
-        statusText.Text = "🧊 Разморожено: " .. count .. " предметов"
-        statusText.TextColor3 = Color3.fromRGB(255, 200, 0)
-    end)
-    
-    yPos = yPos + 0.11
-    
-    local stopBtn = createBtn("⛔ ОСТАНОВИТЬ ВСЁ", yPos, Color3.fromRGB(150, 0, 30), function()
+    local stopBtn = createBtn("⛔ ОСТАНОВИТЬ ВСЁ", y, Color3.fromRGB(150, 0, 30), function()
         stopAll()
-        updateButtons()
-        statusText.Text = "⛔ ВСЁ ОСТАНОВЛЕНО"
-        statusText.TextColor3 = Color3.fromRGB(255, 100, 100)
+        if statusText then
+            statusText.Text = "⛔ ВСЁ ОСТАНОВЛЕНО"
+            statusText.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
     end)
     
-    updateButtons()
     return screenGui
 end
 
 -- ========================================
 -- === КНОПКА ОТКРЫТИЯ ===
 -- ========================================
-local openBtn = nil
-
 local function createOpenButton()
-    if openBtn then 
+    if openBtn then
         openBtn:Destroy()
         openBtn = nil
     end
     
     openBtn = Instance.new("TextButton")
-    openBtn.Size = UDim2.new(0, 70, 0, 70)
+    openBtn.Size = UDim2.new(0, 60, 0, 60)
     openBtn.Position = UDim2.new(0.85, 0, 0.85, 0)
     openBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 200)
     openBtn.BackgroundTransparency = 0.15
     openBtn.Text = "💀"
     openBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     openBtn.Font = Enum.Font.GothamBold
-    openBtn.TextSize = 32
+    openBtn.TextSize = 30
     openBtn.BorderSizePixel = 2
     openBtn.BorderColor3 = Color3.fromRGB(200, 50, 200)
     openBtn.Parent = player:WaitForChild("PlayerGui")
     openBtn.Visible = false
     
-    local openCorner = Instance.new("UICorner")
-    openCorner.CornerRadius = UDim.new(1, 0)
-    openCorner.Parent = openBtn
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(1, 0)
+    c.Parent = openBtn
     
     openBtn.MouseButton1Click:Connect(function()
         if not screenGui then
             createGUI()
             openBtn.Visible = false
+            -- Восстанавливаем состояния
+            if flingActive and flingBtn then
+                flingBtn.Text = "💥 FLING ALL [ВКЛ]"
+                flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
+            end
+            if antiGrabActive and antiBtn then
+                antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
+                antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+            end
+            if speedModeActive and speedBtn then
+                speedBtn.Text = "🏃 ROBLOX EGOR [ВКЛ]"
+                speedBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+            end
         end
     end)
 end
@@ -668,22 +452,17 @@ end
 -- === ПОСТОЯННЫЙ КОНТРОЛЬ ===
 -- ========================================
 local function tick()
-    if character and character.Parent then
-        protectSelf()
-        fixJump()
-        applySpeed()
-        if antiGrabActive then
-            applyAntiGrab()
-        end
-    end
+    if not character or not character.Parent then return end
+    killVelocity()
+    if antiGrabActive then antiGrab() end
+    setSpeed()
 end
 
 -- ========================================
 -- === ИНИЦИАЛИЗАЦИЯ ===
 -- ========================================
-fixJump()
-applySpeed()
-enableAntiGrab()
+setSpeed()
+antiGrab()
 createGUI()
 createOpenButton()
 
@@ -694,25 +473,20 @@ player.CharacterAdded:Connect(function(newChar)
     humanoid = character:WaitForChild("Humanoid")
     rootPart = character:WaitForChild("HumanoidRootPart")
     wait(0.5)
-    fixJump()
-    applySpeed()
-    if antiGrabActive then enableAntiGrab() end
+    killVelocity()
+    setSpeed()
+    if antiGrabActive then antiGrab() end
     if flingActive then
         stopFling()
         startFling()
     end
-    if freezeGrabActive then
-        setupFreezeGrab()
-    end
 end)
 
 print("====================================")
-print("  💀 gakuka FTAP - ULTRA FIXED")
-print("  v1.3 alpha beta super super mega beta")
+print("  💀 gakuka FTAP - FINAL v1.3")
 print("  =================================")
-print("  🛡️ ANTI-GRAB - тебя НЕЛЬЗЯ взять!")
+print("  🛡️ ANTI-GRAB - тебя НЕЛЬЗЯ взять")
 print("  ✅ ROBLOX EGOR - скорость 70")
-print("  ✅ ПРЫЖОК - как в игре")
-print("  ✅ СВОРАЧИВАНИЕ - скрывает кнопки")
 print("  ✅ ТЫ НЕ ЛЕТАЕШЬ")
+print("  ✅ СВОРАЧИВАНИЕ - скрывает кнопки")
 print("====================================")
