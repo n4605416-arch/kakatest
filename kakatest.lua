@@ -1,197 +1,104 @@
--- gakuka(govno) v1.0 FINAL FIX
--- ТЫ ТОЧНО НЕ ЛЕТАЕШЬ!
--- Версия: 1.0 alpha beta beta super duper fixed
+-- gakuka FTAP - РАБОЧАЯ ВЕРСИЯ (FREEZE GRAB + FLING ALL)
+-- Без глюков, без полёта, без GRAB FTAP
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-
 local player = Players.LocalPlayer
+
 if not player then return end
 
--- === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
--- Состояния
 local flingActive = false
-local grabFTAPActive = false
-local freezeGrabActive = false
 local antiGrabActive = true
-
--- Хранилища
-local flingConnections = {}
+local freezeGrabActive = false
 local frozenObjects = {}
-local screenGui = nil
-local mainFrame = nil
-local guiVisible = true
+local connections = {}
+local touchConnections = {}
 
--- ════════════════════════════════════════════════
--- === 1. ЗАЩИТА ОТ ПОЛЁТА ДЛЯ СЕБЯ (ГЛАВНОЕ) ===
--- ════════════════════════════════════════════════
-local selfProtectionConn = nil
+-- ========================================
+-- === ЗАЩИТА ОТ ПОЛЁТА ===
+-- ========================================
+local function protectSelf()
+    if rootPart then
+        rootPart.Velocity = Vector3.new(0, 0, 0)
+        rootPart.RotVelocity = Vector3.new(0, 0, 0)
+    end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part ~= rootPart then
+            part.Velocity = Vector3.new(0, 0, 0)
+            part.RotVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
 
-local function startSelfProtection()
-    if selfProtectionConn then return end
-    
-    selfProtectionConn = RunService.Heartbeat:Connect(function()
-        if not character or not character.Parent then return end
-        
-        -- 1. Сбрасываем скорость СЕБЯ каждые 0.1 сек
-        if rootPart then
-            if rootPart.Velocity.Magnitude > 5 then
-                rootPart.Velocity = Vector3.new(0, 0, 0)
-            end
-            if rootPart.RotVelocity.Magnitude > 5 then
-                rootPart.RotVelocity = Vector3.new(0, 0, 0)
-            end
-        end
-        
-        -- 2. Отключаем гравитацию для всех частей тела
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                if part.Velocity.Magnitude > 5 then
-                    part.Velocity = Vector3.new(0, 0, 0)
-                end
-                if part.RotVelocity.Magnitude > 5 then
-                    part.RotVelocity = Vector3.new(0, 0, 0)
-                end
-            end
-        end
-        
-        -- 3. Принудительно ставим платформу (отключает гравитацию)
+-- ========================================
+-- === ANTI-GRAB ===
+-- ========================================
+local function enableAntiGrab()
+    pcall(function()
         if humanoid then
-            humanoid.PlatformStand = false -- Оставляем включенным
-            -- Сбрасываем состояние, если оно "летающее"
-            local state = humanoid:GetState()
-            if state == Enum.HumanoidStateType.Jumping or 
-               state == Enum.HumanoidStateType.FallingDown or
-               state == Enum.HumanoidStateType.Physics then
-                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+            humanoid.AutoRotate = false
+        end
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
             end
         end
     end)
 end
 
-local function stopSelfProtection()
-    if selfProtectionConn then
-        selfProtectionConn:Disconnect()
-        selfProtectionConn = nil
-    end
-end
-
--- ════════════════════════════════════════════════
--- === 2. FLING ALL (только другие) ===
--- ════════════════════════════════════════════════
+-- ========================================
+-- === FLING ALL ===
+-- ========================================
 local function startFling()
     if flingActive then return end
     flingActive = true
     
-    local function flingLoop()
-        if not flingActive or not character or not character.Parent then
-            flingActive = false
-            return
-        end
+    local conn = RunService.Heartbeat:Connect(function()
+        if not flingActive then return end
+        protectSelf()
         
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player then
                 local char = plr.Character
                 if char and char:FindFirstChild("HumanoidRootPart") then
                     local root = char.HumanoidRootPart
-                    local power = math.random(400, 800)
-                    local dir = Vector3.new(
-                        math.random(-100, 100),
-                        math.random(80, 300),
-                        math.random(-100, 100)
-                    ).Unit
-                    root.Velocity = dir * power
+                    root.Velocity = Vector3.new(
+                        math.random(-500, 500),
+                        math.random(100, 400),
+                        math.random(-500, 500)
+                    )
                     root.RotVelocity = Vector3.new(
-                        math.random(-400, 400),
-                        math.random(-400, 400),
-                        math.random(-400, 400)
+                        math.random(-300, 300),
+                        math.random(-300, 300),
+                        math.random(-300, 300)
                     )
                 end
             end
         end
-    end
+    end)
     
-    local conn = RunService.Heartbeat:Connect(flingLoop)
-    table.insert(flingConnections, conn)
+    table.insert(connections, conn)
     print("[Fling] ВКЛЮЧЕН")
 end
 
 local function stopFling()
     flingActive = false
-    for _, conn in ipairs(flingConnections) do
+    for _, conn in ipairs(connections) do
         pcall(conn.Disconnect, conn)
     end
-    flingConnections = {}
-    
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player then
-            local char = plr.Character
-            if char then
-                local root = char:FindFirstChild("HumanoidRootPart")
-                if root then
-                    root.Velocity = Vector3.new(0, 0, 0)
-                    root.RotVelocity = Vector3.new(0, 0, 0)
-                end
-            end
-        end
-    end
+    connections = {}
     print("[Fling] ВЫКЛЮЧЕН")
 end
 
--- ════════════════════════════════════════════════
--- === 3. GRAB FTAP ===
--- ════════════════════════════════════════════════
-local function onGrabbed(otherPart)
-    if not grabFTAPActive then return end
-    if not character or not character.Parent then return end
-    
-    local otherCharacter = otherPart:FindFirstAncestorOfClass("Model")
-    if not otherCharacter or otherCharacter == character then return end
-    
-    local otherHumanoid = otherCharacter:FindFirstChild("Humanoid")
-    local otherRoot = otherCharacter:FindFirstChild("HumanoidRootPart")
-    if not otherHumanoid or not otherRoot then return end
-    
-    if otherHumanoid:GetState() ~= Enum.HumanoidStateType.Grabbed then return end
-    
-    local power = math.random(600, 1500)
-    local direction = Vector3.new(
-        math.random(-150, 150),
-        math.random(150, 500),
-        math.random(-150, 150)
-    ).Unit
-    
-    otherRoot.Velocity = direction * power
-    otherRoot.RotVelocity = Vector3.new(
-        math.random(-600, 600),
-        math.random(-600, 600),
-        math.random(-600, 600)
-    )
-    
-    pcall(function()
-        otherHumanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
-        task.wait(0.1)
-        otherHumanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, true)
-    end)
-end
-
-local function setupGrabFTAP()
-    if not character then return end
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.Touched:Connect(onGrabbed)
-        end
-    end
-end
-
--- ════════════════════════════════════════════════
--- === 4. FREEZE GRAB ===
--- ════════════════════════════════════════════════
+-- ========================================
+-- === FREEZE GRAB ===
+-- ========================================
 local function freezeObject(object)
     if not object or not object:IsA("BasePart") then return end
     if frozenObjects[object] then return end
@@ -259,500 +166,229 @@ local function clearFrozen()
     frozenObjects = {}
 end
 
-local function startFreezeGrab()
+local function setupFreezeGrab()
     if not character then return end
-    
-    for _, tool in ipairs(character:GetChildren()) do
-        if tool:IsA("Tool") or tool:IsA("BasePart") then
-            if tool:FindFirstChild("Handle") then
-                local handle = tool.Handle
-                if handle and handle:IsA("BasePart") and not frozenObjects[handle] then
-                    freezeObject(handle)
-                end
-            else
-                if tool:IsA("BasePart") and not frozenObjects[tool] then
-                    freezeObject(tool)
-                end
-            end
-        end
+    for _, conn in ipairs(touchConnections) do
+        pcall(conn.Disconnect, conn)
     end
-end
-
--- ════════════════════════════════════════════════
--- === 5. ANTI-GRAB ===
--- ════════════════════════════════════════════════
-local antiGrabConnections = {}
-
-local function enableAntiGrab()
-    if not character then return end
-    
-    pcall(function()
-        if humanoid then
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            humanoid.AutoRotate = false
-            humanoid.PlatformStand = true -- ОТКЛЮЧАЕМ ГРАВИТАЦИЮ!
-        end
-    end)
+    touchConnections = {}
     
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
-            pcall(function()
-                part.CanCollide = true
-                part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-            end)
-        end
-    end
-    
-    if rootPart then
-        pcall(function()
-            rootPart.CanCollide = true
-            rootPart.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-        end)
-    end
-    
-    if #antiGrabConnections == 0 then
-        local loop = RunService.Heartbeat:Connect(function()
-            if not antiGrabActive then return end
-            if not character or not character.Parent then return end
-            pcall(function()
-                if humanoid then
-                    humanoid.PlatformStand = true
-                    if humanoid:GetState() == Enum.HumanoidStateType.Grabbed then
-                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-                    end
-                end
-                if rootPart then
-                    rootPart.Velocity = Vector3.new(0, 0, 0)
-                    rootPart.RotVelocity = Vector3.new(0, 0, 0)
+            local conn = part.Touched:Connect(function(otherPart)
+                if not freezeGrabActive then return end
+                if not character or not character.Parent then return end
+                
+                local otherCharacter = otherPart:FindFirstAncestorOfClass("Model")
+                if not otherCharacter or otherCharacter == character then return end
+                
+                -- Проверяем что это предмет (не игрок)
+                if otherCharacter:FindFirstChild("Humanoid") then return end
+                
+                local partToFreeze = otherPart
+                if partToFreeze and partToFreeze:IsA("BasePart") then
+                    freezeObject(partToFreeze)
                 end
             end)
-        end)
-        table.insert(antiGrabConnections, loop)
-    end
-    
-    print("[Anti-Grab] ВКЛЮЧЕН")
-end
-
-local function disableAntiGrab()
-    antiGrabActive = false
-    
-    pcall(function()
-        if humanoid then
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            humanoid.PlatformStand = false
+            table.insert(touchConnections, conn)
         end
-    end)
-    
-    for _, conn in ipairs(antiGrabConnections) do
-        pcall(conn.Disconnect, conn)
     end
-    antiGrabConnections = {}
-    print("[Anti-Grab] ВЫКЛЮЧЕН")
 end
 
--- ════════════════════════════════════════════════
--- === ОБЩИЕ ФУНКЦИИ ===
--- ════════════════════════════════════════════════
-local function stopAll()
-    stopFling()
-    grabFTAPActive = false
-    freezeGrabActive = false
-    clearFrozen()
-    print("[Все] ОСТАНОВЛЕНО")
-end
-
--- ════════════════════════════════════════════════
+-- ========================================
 -- === GUI ===
--- ════════════════════════════════════════════════
-local function createGUI()
-    if screenGui then screenGui:Destroy() end
+-- ========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "gakukaGUI"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 320, 0, 320)
+frame.Position = UDim2.new(0.5, -160, 0.5, -160)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+frame.BackgroundTransparency = 0.15
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(200, 50, 200)
+frame.Parent = screenGui
+frame.Active = true
+frame.Draggable = true
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = frame
+
+-- Заголовок
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundTransparency = 1
+title.Text = "💀 gakuka FTAP"
+title.TextColor3 = Color3.fromRGB(255, 50, 200)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.Parent = frame
+
+-- Статус
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(0.9, 0, 0, 25)
+status.Position = UDim2.new(0.05, 0, 0.18, 0)
+status.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
+status.BackgroundTransparency = 0.5
+status.Text = "✅ ТЫ НЕ ЛЕТАЕШЬ!"
+status.TextColor3 = Color3.fromRGB(0, 255, 100)
+status.Font = Enum.Font.GothamSemibold
+status.TextSize = 13
+status.Parent = frame
+
+local statusCorner = Instance.new("UICorner")
+statusCorner.CornerRadius = UDim.new(0, 6)
+statusCorner.Parent = status
+
+-- ===== КНОПКИ =====
+local function createBtn(text, y, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.85, 0, 0, 38)
+    btn.Position = UDim2.new(0.075, 0, y, 0)
+    btn.BackgroundColor3 = color or Color3.fromRGB(200, 40, 40)
+    btn.BackgroundTransparency = 0.3
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 15
+    btn.BorderSizePixel = 2
+    btn.BorderColor3 = Color3.fromRGB(80, 80, 150)
+    btn.Parent = frame
     
-    screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "gakukaGUI"
-    screenGui.Parent = player:WaitForChild("PlayerGui")
-    screenGui.ResetOnSpawn = false
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btn
     
-    mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 450)
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -225)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 30)
-    mainFrame.BackgroundTransparency = 0.1
-    mainFrame.BorderSizePixel = 2
-    mainFrame.BorderColor3 = Color3.fromRGB(200, 50, 200)
-    mainFrame.Parent = screenGui
-    mainFrame.Active = true
-    mainFrame.Draggable = true
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = mainFrame
-    
-    -- Заголовок
-    local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1, 0, 0, 50)
-    titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 55)
-    titleBar.BackgroundTransparency = 0.2
-    titleBar.BorderSizePixel = 2
-    titleBar.BorderColor3 = Color3.fromRGB(200, 50, 200)
-    titleBar.Parent = mainFrame
-    
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 12)
-    titleCorner.Parent = titleBar
-    
-    local titleText = Instance.new("TextLabel")
-    titleText.Size = UDim2.new(1, -70, 0, 30)
-    titleText.Position = UDim2.new(0, 10, 0, 0)
-    titleText.BackgroundTransparency = 1
-    titleText.Text = "💀 gakuka FTAP"
-    titleText.TextColor3 = Color3.fromRGB(255, 50, 200)
-    titleText.Font = Enum.Font.GothamBold
-    titleText.TextSize = 18
-    titleText.TextXAlignment = Enum.TextXAlignment.Left
-    titleText.Parent = titleBar
-    
-    local verText = Instance.new("TextLabel")
-    verText.Size = UDim2.new(1, -70, 0, 20)
-    verText.Position = UDim2.new(0, 10, 0, 28)
-    verText.BackgroundTransparency = 1
-    verText.Text = "v1.0 FINAL FIX - ТЫ НЕ ЛЕТАЕШЬ!"
-    verText.TextColor3 = Color3.fromRGB(0, 255, 100)
-    verText.Font = Enum.Font.Gotham
-    verText.TextSize = 11
-    verText.TextXAlignment = Enum.TextXAlignment.Left
-    verText.Parent = titleBar
-    
-    -- Свернуть
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 35, 0, 35)
-    toggleBtn.Position = UDim2.new(1, -75, 0, 8)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
-    toggleBtn.Text = "−"
-    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextSize = 24
-    toggleBtn.BorderSizePixel = 0
-    toggleBtn.Parent = titleBar
-    
-    local toggleCorner = Instance.new("UICorner")
-    toggleCorner.CornerRadius = UDim.new(0, 6)
-    toggleCorner.Parent = toggleBtn
-    
-    toggleBtn.MouseButton1Click:Connect(function()
-        guiVisible = not guiVisible
-        if guiVisible then
-            mainFrame.Size = UDim2.new(0, 400, 0, 450)
-            toggleBtn.Text = "−"
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
-        else
-            mainFrame.Size = UDim2.new(0, 400, 0, 50)
-            toggleBtn.Text = "+"
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        end
-    end)
-    
-    -- Закрыть
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0, 35, 0, 35)
-    closeBtn.Position = UDim2.new(1, -40, 0, 8)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    closeBtn.Text = "✕"
-    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 20
-    closeBtn.BorderSizePixel = 0
-    closeBtn.Parent = titleBar
-    
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 6)
-    closeCorner.Parent = closeBtn
-    
-    closeBtn.MouseButton1Click:Connect(function()
-        stopAll()
-        screenGui:Destroy()
-    end)
-    
-    -- Статус
-    local statusBar = Instance.new("TextLabel")
-    statusBar.Size = UDim2.new(0.9, 0, 0, 28)
-    statusBar.Position = UDim2.new(0.05, 0, 0.14, 0)
-    statusBar.BackgroundColor3 = Color3.fromRGB(35, 35, 60)
-    statusBar.BackgroundTransparency = 0.5
-    statusBar.Text = "✅ ТЫ НЕ ЛЕТАЕШЬ!"
-    statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
-    statusBar.Font = Enum.Font.GothamSemibold
-    statusBar.TextSize = 14
-    statusBar.TextXAlignment = Enum.TextXAlignment.Center
-    statusBar.Parent = mainFrame
-    
-    local statusCorner = Instance.new("UICorner")
-    statusCorner.CornerRadius = UDim.new(0, 6)
-    statusCorner.Parent = statusBar
-    
-    -- ===== КНОПКИ =====
-    local yPos = 0.20
-    
-    -- 1. FLING ALL
-    local flingBtn = Instance.new("TextButton")
-    flingBtn.Size = UDim2.new(0.85, 0, 0, 42)
-    flingBtn.Position = UDim2.new(0.075, 0, yPos, 0)
-    flingBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-    flingBtn.BackgroundTransparency = 0.3
-    flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
-    flingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flingBtn.Font = Enum.Font.GothamBold
-    flingBtn.TextSize = 16
-    flingBtn.BorderSizePixel = 2
-    flingBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
-    flingBtn.Parent = mainFrame
-    
-    local btnCorner1 = Instance.new("UICorner")
-    btnCorner1.CornerRadius = UDim.new(0, 8)
-    btnCorner1.Parent = flingBtn
-    
-    yPos = yPos + 0.12
-    
-    -- 2. GRAB FTAP
-    local grabBtn = Instance.new("TextButton")
-    grabBtn.Size = UDim2.new(0.85, 0, 0, 42)
-    grabBtn.Position = UDim2.new(0.075, 0, yPos, 0)
-    grabBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-    grabBtn.BackgroundTransparency = 0.3
-    grabBtn.Text = "🤜 GRAB FTAP [ВЫКЛ]"
-    grabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    grabBtn.Font = Enum.Font.GothamBold
-    grabBtn.TextSize = 16
-    grabBtn.BorderSizePixel = 2
-    grabBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
-    grabBtn.Parent = mainFrame
-    
-    local btnCorner2 = Instance.new("UICorner")
-    btnCorner2.CornerRadius = UDim.new(0, 8)
-    btnCorner2.Parent = grabBtn
-    
-    yPos = yPos + 0.12
-    
-    -- 3. FREEZE GRAB
-    local freezeBtn = Instance.new("TextButton")
-    freezeBtn.Size = UDim2.new(0.85, 0, 0, 42)
-    freezeBtn.Position = UDim2.new(0.075, 0, yPos, 0)
-    freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-    freezeBtn.BackgroundTransparency = 0.3
-    freezeBtn.Text = "❄️ FREEZE GRAB [ВЫКЛ]"
-    freezeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    freezeBtn.Font = Enum.Font.GothamBold
-    freezeBtn.TextSize = 16
-    freezeBtn.BorderSizePixel = 2
-    freezeBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
-    freezeBtn.Parent = mainFrame
-    
-    local btnCorner3 = Instance.new("UICorner")
-    btnCorner3.CornerRadius = UDim.new(0, 8)
-    btnCorner3.Parent = freezeBtn
-    
-    yPos = yPos + 0.12
-    
-    -- 4. ANTI-GRAB
-    local antiBtn = Instance.new("TextButton")
-    antiBtn.Size = UDim2.new(0.85, 0, 0, 42)
-    antiBtn.Position = UDim2.new(0.075, 0, yPos, 0)
-    antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-    antiBtn.BackgroundTransparency = 0.3
-    antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
-    antiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    antiBtn.Font = Enum.Font.GothamBold
-    antiBtn.TextSize = 16
-    antiBtn.BorderSizePixel = 2
-    antiBtn.BorderColor3 = Color3.fromRGB(0, 200, 0)
-    antiBtn.Parent = mainFrame
-    
-    local btnCorner4 = Instance.new("UICorner")
-    btnCorner4.CornerRadius = UDim.new(0, 8)
-    btnCorner4.Parent = antiBtn
-    
-    yPos = yPos + 0.12
-    
-    -- 5. CLEAR FROZEN
-    local clearBtn = Instance.new("TextButton")
-    clearBtn.Size = UDim2.new(0.85, 0, 0, 35)
-    clearBtn.Position = UDim2.new(0.075, 0, yPos, 0)
-    clearBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
-    clearBtn.BackgroundTransparency = 0.3
-    clearBtn.Text = "🧊 РАЗМОРОЗИТЬ ВСЁ"
-    clearBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    clearBtn.Font = Enum.Font.GothamBold
-    clearBtn.TextSize = 15
-    clearBtn.BorderSizePixel = 2
-    clearBtn.BorderColor3 = Color3.fromRGB(200, 150, 0)
-    clearBtn.Parent = mainFrame
-    
-    local btnCorner5 = Instance.new("UICorner")
-    btnCorner5.CornerRadius = UDim.new(0, 8)
-    btnCorner5.Parent = clearBtn
-    
-    yPos = yPos + 0.10
-    
-    -- 6. STOP ALL
-    local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(0.85, 0, 0, 40)
-    stopBtn.Position = UDim2.new(0.075, 0, yPos + 0.01, 0)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 30)
-    stopBtn.BackgroundTransparency = 0.2
-    stopBtn.Text = "⛔ ОСТАНОВИТЬ ВСЁ"
-    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    stopBtn.Font = Enum.Font.GothamBold
-    stopBtn.TextSize = 17
-    stopBtn.BorderSizePixel = 2
-    stopBtn.BorderColor3 = Color3.fromRGB(200, 0, 50)
-    stopBtn.Parent = mainFrame
-    
-    local btnCorner6 = Instance.new("UICorner")
-    btnCorner6.CornerRadius = UDim.new(0, 8)
-    btnCorner6.Parent = stopBtn
-    
-    -- ===== ЛОГИКА =====
-    local function updateButtons()
-        if flingActive then
-            flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-            flingBtn.BorderColor3 = Color3.fromRGB(0, 255, 80)
-            flingBtn.Text = "💥 FLING ALL [ВКЛ]"
-        else
-            flingBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-            flingBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
-            flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
-        end
-        
-        if grabFTAPActive then
-            grabBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
-            grabBtn.BorderColor3 = Color3.fromRGB(0, 255, 80)
-            grabBtn.Text = "🤜 GRAB FTAP [ВКЛ]"
-        else
-            grabBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-            grabBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
-            grabBtn.Text = "🤜 GRAB FTAP [ВЫКЛ]"
-        end
-        
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- 1. FLING ALL
+local flingBtn = createBtn("💥 FLING ALL [ВЫКЛ]", 0.26, Color3.fromRGB(200, 40, 40), function()
+    if flingActive then
+        stopFling()
+        flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
+        flingBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+        status.Text = "✅ FLING ВЫКЛЮЧЕН"
+        status.TextColor3 = Color3.fromRGB(200, 200, 200)
+    else
         if freezeGrabActive then
-            freezeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-            freezeBtn.BorderColor3 = Color3.fromRGB(0, 255, 255)
-            freezeBtn.Text = "❄️ FREEZE GRAB [ВКЛ]"
-        else
-            freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-            freezeBtn.BorderColor3 = Color3.fromRGB(80, 80, 150)
+            freezeGrabActive = false
+            clearFrozen()
             freezeBtn.Text = "❄️ FREEZE GRAB [ВЫКЛ]"
+            freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
         end
-        
-        if antiGrabActive then
-            antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-            antiBtn.BorderColor3 = Color3.fromRGB(0, 255, 0)
-            antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
-        else
-            antiBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-            antiBtn.BorderColor3 = Color3.fromRGB(200, 0, 0)
-            antiBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
-        end
+        startFling()
+        flingBtn.Text = "💥 FLING ALL [ВКЛ]"
+        flingBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 50)
+        status.Text = "💥 FLING АКТИВЕН! (ты не летаешь)"
+        status.TextColor3 = Color3.fromRGB(0, 255, 100)
     end
-    
-    -- FLING ALL
-    flingBtn.MouseButton1Click:Connect(function()
+end)
+
+-- 2. FREEZE GRAB
+local freezeBtn = createBtn("❄️ FREEZE GRAB [ВЫКЛ]", 0.40, Color3.fromRGB(200, 40, 40), function()
+    freezeGrabActive = not freezeGrabActive
+    if freezeGrabActive then
         if flingActive then
             stopFling()
-            statusBar.Text = "✅ FLING ALL ВЫКЛЮЧЕН"
-            statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
-        else
-            if grabFTAPActive then grabFTAPActive = false end
-            if freezeGrabActive then 
-                freezeGrabActive = false
-                clearFrozen()
-            end
-            startFling()
-            statusBar.Text = "💥 FLING ALL АКТИВЕН! (ты НЕ летаешь)"
-            statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
+            flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
+            flingBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
         end
-        updateButtons()
-    end)
-    
-    -- GRAB FTAP
-    grabBtn.MouseButton1Click:Connect(function()
-        grabFTAPActive = not grabFTAPActive
-        if grabFTAPActive then
-            if flingActive then stopFling() end
-            if freezeGrabActive then 
-                freezeGrabActive = false
-                clearFrozen()
-            end
-            setupGrabFTAP()
-            statusBar.Text = "🤜 GRAB FTAP АКТИВЕН!"
-            statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
-        else
-            statusBar.Text = "✅ GRAB FTAP ВЫКЛЮЧЕН"
-            statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
-        end
-        updateButtons()
-    end)
-    
-    -- FREEZE GRAB
-    freezeBtn.MouseButton1Click:Connect(function()
-        freezeGrabActive = not freezeGrabActive
-        if freezeGrabActive then
-            if flingActive then stopFling() end
-            if grabFTAPActive then grabFTAPActive = false end
-            statusBar.Text = "❄️ FREEZE GRAB АКТИВЕН!"
-            statusBar.TextColor3 = Color3.fromRGB(0, 200, 255)
-            startFreezeGrab()
-        else
-            clearFrozen()
-            statusBar.Text = "✅ FREEZE GRAB ВЫКЛЮЧЕН"
-            statusBar.TextColor3 = Color3.fromRGB(200, 200, 200)
-        end
-        updateButtons()
-    end)
-    
-    -- ANTI-GRAB
-    antiBtn.MouseButton1Click:Connect(function()
-        antiGrabActive = not antiGrabActive
-        if antiGrabActive then
-            enableAntiGrab()
-            statusBar.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
-            statusBar.TextColor3 = Color3.fromRGB(0, 255, 100)
-        else
-            disableAntiGrab()
-            statusBar.Text = "🛡️ ANTI-GRAB ВЫКЛЮЧЕН"
-            statusBar.TextColor3 = Color3.fromRGB(255, 150, 0)
-        end
-        updateButtons()
-    end)
-    
-    -- CLEAR FROZEN
-    clearBtn.MouseButton1Click:Connect(function()
-        local count = 0
-        for _ in pairs(frozenObjects) do count = count + 1 end
+        setupFreezeGrab()
+        freezeBtn.Text = "❄️ FREEZE GRAB [ВКЛ]"
+        freezeBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+        status.Text = "❄️ FREEZE GRAB АКТИВЕН! (бери предметы)"
+        status.TextColor3 = Color3.fromRGB(0, 200, 255)
+    else
         clearFrozen()
-        statusBar.Text = "🧊 Разморожено: " .. count .. " предметов"
-        statusBar.TextColor3 = Color3.fromRGB(255, 200, 0)
-    end)
-    
-    -- STOP ALL
-    stopBtn.MouseButton1Click:Connect(function()
-        stopAll()
-        statusBar.Text = "⛔ ВСЁ ОСТАНОВЛЕНО"
-        statusBar.TextColor3 = Color3.fromRGB(255, 100, 100)
-        updateButtons()
-    end)
-    
-    updateButtons()
-    return screenGui
-end
+        freezeBtn.Text = "❄️ FREEZE GRAB [ВЫКЛ]"
+        freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+        status.Text = "✅ FREEZE GRAB ВЫКЛЮЧЕН"
+        status.TextColor3 = Color3.fromRGB(200, 200, 200)
+    end
+end)
 
--- ════════════════════════════════════════════════
--- === РЕСПАВН ===
--- ════════════════════════════════════════════════
+-- 3. ANTI-GRAB
+local antiBtn = createBtn("🛡️ ANTI-GRAB [ВКЛ]", 0.54, Color3.fromRGB(0, 180, 0), function()
+    antiGrabActive = not antiGrabActive
+    if antiGrabActive then
+        enableAntiGrab()
+        antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
+        antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+        status.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
+        status.TextColor3 = Color3.fromRGB(0, 255, 100)
+    else
+        antiBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
+        antiBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        status.Text = "🛡️ ANTI-GRAB ВЫКЛЮЧЕН"
+        status.TextColor3 = Color3.fromRGB(255, 150, 0)
+    end
+end)
+
+-- 4. CLEAR FROZEN
+local clearBtn = createBtn("🧊 РАЗМОРОЗИТЬ ВСЁ", 0.68, Color3.fromRGB(200, 150, 0), function()
+    local count = 0
+    for _ in pairs(frozenObjects) do count = count + 1 end
+    clearFrozen()
+    status.Text = "🧊 Разморожено: " .. count .. " предметов"
+    status.TextColor3 = Color3.fromRGB(255, 200, 0)
+end)
+
+-- 5. STOP ALL
+local stopBtn = createBtn("⛔ ОСТАНОВИТЬ ВСЁ", 0.80, Color3.fromRGB(150, 0, 30), function()
+    stopFling()
+    flingBtn.Text = "💥 FLING ALL [ВЫКЛ]"
+    flingBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+    
+    freezeGrabActive = false
+    clearFrozen()
+    freezeBtn.Text = "❄️ FREEZE GRAB [ВЫКЛ]"
+    freezeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+    
+    status.Text = "⛔ ВСЁ ОСТАНОВЛЕНО"
+    status.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+
+-- Кнопка закрытия
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.BorderSizePixel = 0
+closeBtn.Parent = frame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function()
+    stopFling()
+    clearFrozen()
+    screenGui:Destroy()
+end)
+
+-- ========================================
+-- === ИНИЦИАЛИЗАЦИЯ ===
+-- ========================================
+enableAntiGrab()
+
+-- Защита от полёта (постоянная)
+RunService.Heartbeat:Connect(function()
+    if character and character.Parent then
+        protectSelf()
+    end
+end)
+
+-- Респавн
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoid = character:WaitForChild("Humanoid")
@@ -763,24 +399,16 @@ player.CharacterAdded:Connect(function(newChar)
         stopFling()
         startFling()
     end
-    if grabFTAPActive then setupGrabFTAP() end
-    if freezeGrabActive then startFreezeGrab() end
+    if freezeGrabActive then
+        setupFreezeGrab()
+    end
 end)
 
--- ════════════════════════════════════════════════
--- === ЗАПУСК ===
--- ════════════════════════════════════════════════
-createGUI()
-enableAntiGrab()
-startSelfProtection()
-
-print("============================================")
-print("  💀 gakuka(govno) FTAP")
-print("  v1.0 FINAL FIX - ТЫ НЕ ЛЕТАЕШЬ!")
-print("  ==========================================")
-print("  1. FLING ALL - все летают (кроме тебя)")
-print("  2. GRAB FTAP - кидай игроков при взятии")
-print("  3. FREEZE GRAB - морозь предметы")
-print("  4. ANTI-GRAB - защита от захвата")
-print("  ==========================================")
-print("  ✅ Т
+print("====================================")
+print("  💀 gakuka FTAP - РАБОЧАЯ")
+print("  ✅ ТЫ НЕ ЛЕТАЕШЬ")
+print("  =================================")
+print("  1. FLING ALL - все летают")
+print("  2. FREEZE GRAB - морозь предметы")
+print("  3. ANTI-GRAB - защита")
+print("====================================")
