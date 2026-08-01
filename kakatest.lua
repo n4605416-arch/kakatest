@@ -1,9 +1,9 @@
--- gakuka FTAP - FINAL v1.3 (С ANCHOR GRAB)
--- Anchor Grab: предметы замораживаются при отпускании + синяя обводка
+-- gakuka FTAP - FINAL v1.3 (РЕАЛЬНЫЙ ANTI-GRAB ИЗ FTAP)
+-- AntiGrab через PartOwner + ROBLOX EGOR работает
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 
 if not player then return end
@@ -26,145 +26,75 @@ local collapsed = false
 local flingBtn, antiBtn, speedBtn, anchorBtn, statusText, toggleBtn, openBtn
 
 -- ========================================
--- === ANCHOR GRAB (ЗАМОРОЗКА ПРЕДМЕТОВ) ===
+-- === REAL ANTI-GRAB (ИЗ FTAP) ===
 -- ========================================
-local function freezeObject(object)
-    if not object or not object:IsA("BasePart") then return end
-    if frozenObjects[object] then return end
-    
-    pcall(function()
-        -- Сохраняем оригинальные свойства
-        local originalProps = {
-            Anchored = object.Anchored,
-            CanCollide = object.CanCollide,
-            Locked = object.Locked,
-            CustomPhysicalProperties = object.CustomPhysicalProperties,
-            Transparency = object.Transparency,
-            Material = object.Material,
-            Color = object.Color,
-            Position = object.Position
-        }
-        
-        -- ЗАМОРАЖИВАЕМ
-        object.Anchored = true
-        object.CanCollide = true
-        object.Locked = true
-        object.Velocity = Vector3.new(0, 0, 0)
-        object.RotVelocity = Vector3.new(0, 0, 0)
-        object.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-        
-        -- СИНЯЯ ОБВОДКА
-        local glow = Instance.new("SelectionBox")
-        glow.Adornee = object
-        glow.Color3 = Color3.fromRGB(0, 150, 255)
-        glow.Transparency = 0.3
-        glow.LineThickness = 0.15
-        glow.Parent = object
-        
-        -- ЛЁД ЭФФЕКТ
-        object.Transparency = 0.2
-        object.Material = Enum.Material.Ice
-        object.Color = Color3.fromRGB(80, 180, 255)
-        
-        frozenObjects[object] = {
-            Properties = originalProps,
-            Glow = glow
-        }
-        
-        print("[Anchor Grab] Заморожен: " .. object.Name)
-    end)
-end
+local antiGrabConnection = nil
 
-local function unfreezeObject(object)
-    if not object or not frozenObjects[object] then return end
+local function startRealAntiGrab()
+    if antiGrabConnection then return end
     
-    pcall(function()
-        local data = frozenObjects[object]
-        local props = data.Properties
+    antiGrabConnection = RunService.Heartbeat:Connect(function()
+        if not antiGrabActive then return end
+        if not character or not character.Parent then return end
         
-        -- Восстанавливаем
-        object.Anchored = props.Anchored or false
-        object.CanCollide = props.CanCollide or true
-        object.Locked = props.Locked or false
-        object.CustomPhysicalProperties = props.CustomPhysicalProperties or PhysicalProperties.new(0.7, 0.3, 0.5, 0.5, 0.5)
-        object.Transparency = props.Transparency or 0
-        object.Material = props.Material or Enum.Material.Plastic
-        object.Color = props.Color or Color3.fromRGB(255, 255, 255)
-        
-        if data.Glow then
-            data.Glow:Destroy()
-        end
-        frozenObjects[object] = nil
-        print("[Anchor Grab] Разморожен: " .. object.Name)
-    end)
-end
-
-local function clearAllFrozen()
-    for obj, _ in pairs(frozenObjects) do
-        unfreezeObject(obj)
-    end
-    frozenObjects = {}
-    print("[Anchor Grab] Все предметы разморожены")
-end
-
--- ========================================
--- === ОТСЛЕЖИВАНИЕ ГРАБА ===
--- ========================================
-local function checkGrab()
-    if not anchorGrabActive then return end
-    if not character or not character.Parent then return end
-    
-    -- Проверяем, держим ли мы предмет
-    local holdingItem = false
-    local heldObject = nil
-    
-    -- Проверяем через Humanoid
-    if humanoid then
-        -- Проверяем руки
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") and (part.Name == "RightHand" or part.Name == "LeftHand") then
-                for _, child in ipairs(part:GetChildren()) do
-                    if child:IsA("BasePart") and child ~= part and child.Parent ~= character then
-                        -- Это предмет в руке
-                        heldObject = child
-                        holdingItem = true
-                        break
+        -- Проверяем Head на наличие PartOwner (это значит, что нас взяли в FTAP)
+        local head = character:FindFirstChild("Head")
+        if head then
+            local partOwner = head:FindFirstChild("PartOwner")
+            if partOwner then
+                -- НАС ВЗЯЛИ! Принудительно выходим из захвата
+                pcall(function()
+                    -- 1. Отключаем захват через Struggle
+                    local struggle = ReplicatedStorage:FindFirstChild("Struggle")
+                    if struggle then
+                        struggle:FireServer()
                     end
-                end
+                    
+                    -- 2. Останавливаем всю скорость
+                    local stopAllVelocity = ReplicatedStorage:FindFirstChild("GameCorrectionEvents") and ReplicatedStorage.GameCorrectionEvents:FindFirstChild("StopAllVelocity")
+                    if stopAllVelocity then
+                        stopAllVelocity:FireServer()
+                    end
+                    
+                    -- 3. Anchored все части тела на мгновение
+                    for _, part in pairs(character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Anchored = true
+                        end
+                    end
+                    
+                    -- 4. Ждём пока нас отпустят
+                    local heldValue = player:FindFirstChild("IsHeld")
+                    if heldValue then
+                        while heldValue.Value do
+                            task.wait()
+                        end
+                    else
+                        task.wait(0.1)
+                    end
+                    
+                    -- 5. Снимаем Anchored
+                    for _, part in pairs(character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Anchored = false
+                        end
+                    end
+                    
+                    -- 6. Сбрасываем скорость
+                    if rootPart then
+                        rootPart.Velocity = Vector3.new(0, 0, 0)
+                        rootPart.RotVelocity = Vector3.new(0, 0, 0)
+                    end
+                end)
             end
-            if holdingItem then break end
         end
-    end
-    
-    -- Если не держим предмет, но есть замороженные объекты - проверяем не отпустили ли мы
-    if not holdingItem and next(frozenObjects) then
-        -- Проверяем каждый замороженный объект
-        for obj, _ in pairs(frozenObjects) do
-            -- Если объект далеко от персонажа или не в руках - он должен остаться замороженным
-            if obj and obj.Parent and obj:IsDescendantOf(workspace) then
-                -- Оставляем замороженным
-            end
-        end
-    end
+    end)
 end
 
--- ========================================
--- === ОБРАБОТКА ОТПУСКАНИЯ ПРЕДМЕТА ===
--- ========================================
-local function onItemDropped()
-    if not anchorGrabActive then return end
-    if not character or not character.Parent then return end
-    
-    -- Ищем предметы в руках
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") and (part.Name == "RightHand" or part.Name == "LeftHand") then
-            for _, child in ipairs(part:GetChildren()) do
-                if child:IsA("BasePart") and child ~= part and child.Parent ~= character then
-                    -- Предмет в руке - замораживаем его
-                    freezeObject(child)
-                end
-            end
-        end
+local function stopRealAntiGrab()
+    if antiGrabConnection then
+        antiGrabConnection:Disconnect()
+        antiGrabConnection = nil
     end
 end
 
@@ -184,37 +114,73 @@ local function setSpeed()
 end
 
 -- ========================================
--- === ANTI-GRAB ===
+-- === ANCHOR GRAB ===
 -- ========================================
-local function antiGrab()
-    if not humanoid then return end
+local function freezeObject(object)
+    if not object or not object:IsA("BasePart") then return end
+    if frozenObjects[object] then return end
+    
     pcall(function()
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Grabbed, false)
-        if humanoid:GetState() == Enum.HumanoidStateType.Grabbed then
-            humanoid:ChangeState(Enum.HumanoidStateType.Running)
-        end
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+        local originalProps = {
+            Anchored = object.Anchored,
+            CanCollide = object.CanCollide,
+            Locked = object.Locked,
+            CustomPhysicalProperties = object.CustomPhysicalProperties,
+            Transparency = object.Transparency,
+            Material = object.Material,
+            Color = object.Color
+        }
+        
+        object.Anchored = true
+        object.CanCollide = true
+        object.Locked = true
+        object.Velocity = Vector3.new(0, 0, 0)
+        object.RotVelocity = Vector3.new(0, 0, 0)
+        object.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+        object.Transparency = 0.2
+        object.Material = Enum.Material.Ice
+        object.Color = Color3.fromRGB(80, 180, 255)
+        
+        local glow = Instance.new("SelectionBox")
+        glow.Adornee = object
+        glow.Color3 = Color3.fromRGB(0, 150, 255)
+        glow.Transparency = 0.3
+        glow.LineThickness = 0.15
+        glow.Parent = object
+        
+        frozenObjects[object] = {
+            Properties = originalProps,
+            Glow = glow
+        }
     end)
 end
 
--- ========================================
--- === ЗАЩИТА ОТ ПОЛЁТА ===
--- ========================================
-local function killVelocity()
-    if not rootPart then return end
-    if rootPart.Velocity.Magnitude > 100 then
-        rootPart.Velocity = Vector3.new(0, 0, 0)
-        rootPart.RotVelocity = Vector3.new(0, 0, 0)
+local function unfreezeObject(object)
+    if not object or not frozenObjects[object] then return end
+    
+    pcall(function()
+        local data = frozenObjects[object]
+        local props = data.Properties
+        object.Anchored = props.Anchored or false
+        object.CanCollide = props.CanCollide or true
+        object.Locked = props.Locked or false
+        object.CustomPhysicalProperties = props.CustomPhysicalProperties or PhysicalProperties.new(0.7, 0.3, 0.5, 0.5, 0.5)
+        object.Transparency = props.Transparency or 0
+        object.Material = props.Material or Enum.Material.Plastic
+        object.Color = props.Color or Color3.fromRGB(255, 255, 255)
+        
+        if data.Glow then
+            data.Glow:Destroy()
+        end
+        frozenObjects[object] = nil
+    end)
+end
+
+local function clearAllFrozen()
+    for obj, _ in pairs(frozenObjects) do
+        unfreezeObject(obj)
     end
+    frozenObjects = {}
 end
 
 -- ========================================
@@ -237,9 +203,14 @@ local function startFling()
     if flingConn then flingConn:Disconnect() end
     flingConn = RunService.Heartbeat:Connect(function()
         if not flingActive then return end
-        killVelocity()
-        antiGrab()
+        
+        -- ЗАЩИТА СЕБЯ
+        if rootPart and rootPart.Velocity.Magnitude > 100 then
+            rootPart.Velocity = Vector3.new(0, 0, 0)
+            rootPart.RotVelocity = Vector3.new(0, 0, 0)
+        end
         setSpeed()
+        
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player then
                 local char = plr.Character
@@ -302,16 +273,17 @@ end
 local function toggleAntiGrab()
     antiGrabActive = not antiGrabActive
     if antiGrabActive then
-        antiGrab()
+        startRealAntiGrab()
         if antiBtn then
             antiBtn.Text = "🛡️ ANTI-GRAB [ВКЛ]"
             antiBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
         end
         if statusText then
-            statusText.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН"
+            statusText.Text = "🛡️ ANTI-GRAB ВКЛЮЧЕН (FTAP)"
             statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
         end
     else
+        stopRealAntiGrab()
         if antiBtn then
             antiBtn.Text = "🛡️ ANTI-GRAB [ВЫКЛ]"
             antiBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
@@ -334,7 +306,6 @@ local function toggleAnchorGrab()
             statusText.Text = "⚓ ANCHOR GRAB ВКЛЮЧЕН!"
             statusText.TextColor3 = Color3.fromRGB(0, 200, 255)
         end
-        print("[Anchor Grab] ВКЛЮЧЕН")
     else
         clearAllFrozen()
         if anchorBtn then
@@ -345,7 +316,6 @@ local function toggleAnchorGrab()
             statusText.Text = "✅ ANCHOR GRAB ВЫКЛЮЧЕН"
             statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
         end
-        print("[Anchor Grab] ВЫКЛЮЧЕН")
     end
 end
 
@@ -354,6 +324,7 @@ end
 -- ========================================
 local function stopAll()
     stopFling()
+    stopRealAntiGrab()
     if speedModeActive then
         speedModeActive = false
         setSpeed()
@@ -429,7 +400,7 @@ local function createGUI()
     verText.Size = UDim2.new(1, -100, 0, 16)
     verText.Position = UDim2.new(0, 12, 0, 26)
     verText.BackgroundTransparency = 1
-    verText.Text = "v1.3 | ANCHOR GRAB"
+    verText.Text = "v1.3 | REAL ANTI-GRAB FTAP"
     verText.TextColor3 = Color3.fromRGB(0, 200, 255)
     verText.Font = Enum.Font.Gotham
     verText.TextSize = 10
@@ -628,40 +599,21 @@ end
 -- ========================================
 local function tick()
     if not character or not character.Parent then return end
-    killVelocity()
-    if antiGrabActive then antiGrab() end
-    setSpeed()
     
-    -- ANCHOR GRAB: проверяем, держим ли предмет
-    if anchorGrabActive then
-        checkGrab()
+    -- ЗАЩИТА ОТ ПОЛЁТА
+    if rootPart and rootPart.Velocity.Magnitude > 100 then
+        rootPart.Velocity = Vector3.new(0, 0, 0)
+        rootPart.RotVelocity = Vector3.new(0, 0, 0)
     end
-end
-
--- ========================================
--- === ОБРАБОТЧИК ОТПУСКАНИЯ ===
--- ========================================
--- Следим за изменением состояния Humanoid
-local function onStateChanged(oldState, newState)
-    if not anchorGrabActive then return end
-    -- Если персонаж перестал держать предмет
-    if oldState == Enum.HumanoidStateType.Physics and newState ~= Enum.HumanoidStateType.Physics then
-        onItemDropped()
-    end
-    if oldState == Enum.HumanoidStateType.Grabbed and newState ~= Enum.HumanoidStateType.Grabbed then
-        onItemDropped()
-    end
-end
-
-if humanoid then
-    humanoid.StateChanged:Connect(onStateChanged)
+    
+    setSpeed()
 end
 
 -- ========================================
 -- === ИНИЦИАЛИЗАЦИЯ ===
 -- ========================================
 setSpeed()
-antiGrab()
+startRealAntiGrab()
 createGUI()
 createOpenButton()
 
@@ -673,23 +625,18 @@ player.CharacterAdded:Connect(function(newChar)
     rootPart = character:WaitForChild("HumanoidRootPart")
     wait(0.5)
     setSpeed()
-    if antiGrabActive then antiGrab() end
+    if antiGrabActive then startRealAntiGrab() end
     if flingActive then
         stopFling()
         startFling()
     end
-    if anchorGrabActive then
-        -- Переподключаем обработчик
-        humanoid.StateChanged:Connect(onStateChanged)
-    end
 end)
 
 print("====================================")
-print("  💀 gakuka FTAP - ANCHOR GRAB")
+print("  💀 gakuka FTAP - REAL ANTI-GRAB")
 print("  =================================")
-print("  🛡️ ANTI-GRAB - тебя НЕЛЬЗЯ взять")
+print("  🛡️ ANTI-GRAB - PartOwner защита!")
 print("  ✅ ROBLOX EGOR - скорость 70")
 print("  ⚓ ANCHOR GRAB - заморозка предметов")
 print("  ✅ ТЫ НЕ ЛЕТАЕШЬ")
-print("  ✅ СВОРАЧИВАНИЕ - скрывает кнопки")
 print("====================================")
